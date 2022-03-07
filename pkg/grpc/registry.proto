@@ -1,0 +1,45 @@
+syntax = "proto3";
+
+option go_package = "p2p-overlay/pkg/grpc";
+
+service Peers {
+    rpc RegisterPeer (RegisterPeersRequest) returns (RegisterPeersResponse);
+    rpc UnregisterPeer (UnregisterPeersRequest) returns (UnregisterPeersResponse);
+}
+
+message RegisterPeersRequest {
+    string device_name = 1;
+    Peer peer = 2;
+}
+
+message RegisterPeersResponse {
+    string device_name = 1;
+    Peer peer = 2;
+}
+
+message UnregisterPeersRequest {
+    string device_name = 1;
+    string public_key = 2;
+}
+
+message UnregisterPeersResponse {
+}
+
+enum UDPNetworkType {
+    udp = 0;
+    udp4 = 1;
+    udp6 = 2;
+}
+
+message Peer {
+    string public_key = 1;
+    repeated string allowed_ips = 2;
+    UDPNetworkType endpoint_udp_type = 3;
+    string endpoint = 4;
+    string preshared_key = 5;
+    uint32 persistent_keepalive_interval_seconds = 6;
+    uint64 protocol_version = 7;
+    int64 receive_bytes = 8;
+    int64 transmit_bytes = 9;
+    int64 last_handshake_time_unix_sec = 10;
+}
