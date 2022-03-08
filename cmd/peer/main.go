@@ -1,13 +1,21 @@
 package main
 
 import (
-	"fmt"
+	"flag"
 	"p2p-overlay/pkg/peer"
+	"runtime"
 )
 
 func main() {
-	p := peer.NewPeer()
 
+	cableType := flag.String("cable", "wg", "peer connection cable type")
+
+	flag.Parse()
+
+	p := peer.NewPeer(*cableType)
 	p.RegisterSelf()
-	fmt.Println("peer registered...")
+
+	p.SubscribeToOverlayUpdates()
+
+	runtime.Goexit()
 }

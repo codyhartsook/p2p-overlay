@@ -2,9 +2,12 @@ package peer
 
 import (
 	"context"
-	"log"
 	"p2p-overlay/pkg/cable"
+	"p2p-overlay/pkg/pubsub"
 	"time"
+
+	log "github.com/sirupsen/logrus"
+	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 
 	pb "p2p-overlay/pkg/grpc"
 
@@ -13,17 +16,19 @@ import (
 
 const (
 	grpcAddr = "localhost:4224"
+	natsAddr = "localhost:4222"
 )
 
 type Peer struct {
 	cable      cable.Cable
 	grpcClient pb.PeersClient
+	pubsub.Subscriber
 }
 
-func NewPeer() *Peer {
+func NewPeer(peerCableType string) *Peer {
 	p := &Peer{}
 
-	p.cable = cable.NewCable()
+	p.cable = cable.NewCable(peerCableType)
 
 	err := p.cable.Init()
 	if err != nil {
@@ -31,6 +36,7 @@ func NewPeer() *Peer {
 	}
 
 	p.connectToBroker()
+	p.RegisterNatsSubscriber()
 
 	return p
 }
@@ -45,34 +51,37 @@ func (p *Peer) connectToBroker() {
 	client := pb.NewPeersClient(conn)
 	p.grpcClient = client
 
-	log.Print("connected...")
+	log.Print("connected to broker over grpc")
+}
+
+func (p *Peer) SubscribeToOverlayUpdates() {
+	p.SubscribeToChannels(p.updateLocalPeers)
+}
+
+func (p *Peer) updateLocalPeers(peers []wgtypes.Peer) {
+	log.Printf("updating peers in local config")
+	ctx := context.TODO()
+
+	p.cable.SyncPeers(ctx, peers)
 }
 
 func (p *Peer) RegisterSelf() {
-	//var localConfig wgtypes.PeerConfig
+	// Perform config handshake with broker
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*60)
 	defer cancel()
 
-	req := pb.RegisterPeersRequest{}
-	res, err := p.grpcClient.RegisterPeer(ctx, &req)
+	req := pb.RegisterPeerRequest{}
+	brokerRes, err := p.grpcClient.RegisterPeer(ctx, &req)
 	if err != nil {
 		log.Fatalf("could not register: %v", err)
 	}
 
-	log.Printf("registered: %s", res)
+	ctx = context.TODO()
+	brokerConf := cable.ProtobufPeerToConfig(brokerRes.Peer)
+
+	p.cable.RegisterPeer(ctx, brokerRes.DeviceName, brokerConf)
 }
 
 func (p *Peer) UnRegisterSelf() {
 
 }
-
-/*
-Send grpc request to broker with peer config
-
-Recieve broker peer config and nats peer-subscriber channel
-
-Register peer with broker config
-
-Listen to peer-subscriber channel
-
-*/

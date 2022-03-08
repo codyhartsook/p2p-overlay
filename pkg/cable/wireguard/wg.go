@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"os"
 	"runtime"
 	"sync"
 
@@ -21,7 +22,7 @@ const (
 )
 
 type WGCtrl struct {
-	client wgctrl.Client
+	client *wgctrl.Client
 	link   netlink.Link
 	mutex  sync.Mutex
 	keys   map[string]string
@@ -34,13 +35,15 @@ func NewWGCtrl() (*WGCtrl, error) {
 		return nil, errors.Wrap(err, "failed to setup WireGuard link")
 	}
 
-	client, err := wgctrl.New()
-	if err != nil {
-		return nil, err
-	}
+	// Create the controller
+	var err error
+	if w.client, err = wgctrl.New(); err != nil {
+		if os.IsNotExist(err) {
+			return nil, fmt.Errorf("wgctrl is not available on this system")
+		}
 
-	w.client = *client
-	w.keys = make(map[string]string)
+		return nil, errors.Wrap(err, "failed to open wgctl client")
+	}
 
 	log.Info("WireGuard client created")
 
@@ -50,6 +53,7 @@ func NewWGCtrl() (*WGCtrl, error) {
 	}
 
 	pub = priv.PublicKey()
+	w.keys = make(map[string]string)
 	w.keys[PublicKey] = pub.String()
 
 	portInt := int(port)
@@ -110,9 +114,11 @@ func (w *WGCtrl) Init() error {
 	return nil
 }
 
-func (w *WGCtrl) RegisterPeers(ctx context.Context, deviceName string, peers []wgtypes.PeerConfig) error {
+func (w *WGCtrl) RegisterPeer(ctx context.Context, deviceName string, peer wgtypes.PeerConfig) error {
 	w.mutex.Lock()
 	defer w.mutex.Unlock()
+
+	peers := []wgtypes.PeerConfig{peer}
 
 	err := w.client.ConfigureDevice(deviceName, wgtypes.Config{
 		ReplacePeers: false,
@@ -135,7 +141,15 @@ func (w *WGCtrl) RegisterPeers(ctx context.Context, deviceName string, peers []w
 	return nil
 }
 
-func (w *WGCtrl) DeletePeers(ctx context.Context, deviceName string, publicKeys []string) error {
+func (w *WGCtrl) GetPeers(ctx context.Context) ([]wgtypes.Peer, error) {
+	return nil, nil
+}
+
+func (w *WGCtrl) SyncPeers(ctx context.Context, peers []wgtypes.Peer) error {
+	return nil
+}
+
+func (w *WGCtrl) DeletePeer(ctx context.Context, deviceName string, publicKey string) error {
 	return nil
 }
 

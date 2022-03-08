@@ -1,11 +1,17 @@
 package main
 
 import (
+	"flag"
 	"p2p-overlay/pkg/broker"
 )
 
 func main() {
-	b := broker.NewBroker()
+
+	cableType := flag.String("cable", "wg", "peer connection cable type")
+
+	flag.Parse()
+
+	b := broker.NewBroker(*cableType)
 
 	b.StartListeners()
 }

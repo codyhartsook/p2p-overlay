@@ -4,45 +4,44 @@ import (
 	"context"
 	"net"
 	"p2p-overlay/pkg/cable"
+	"p2p-overlay/pkg/pubsub"
 	"sync"
 
 	log "github.com/sirupsen/logrus"
 
 	pb "p2p-overlay/pkg/grpc"
 
-	"github.com/nats-io/nats.go"
 	"google.golang.org/grpc"
 )
 
 const (
-	natsHost = "localhost:4222"
 	grpcAddr = "0.0.0.0:4224"
 )
 
 type Broker struct {
-	cable     cable.Cable
-	publisher *nats.EncodedConn
+	cable cable.Cable
+	pubsub.Publisher
 	pb.UnimplementedPeersServer
 	mutex *sync.RWMutex
 }
 
-func NewBroker() *Broker {
-	b := &Broker{}
+func NewBroker(peerCableType string) *Broker {
+	b := &Broker{mutex: &sync.RWMutex{}}
 
 	// start tunnel cable
-	/*b.cable = cable.NewCable()
+	b.cable = cable.NewCable(peerCableType)
 
 	err := b.cable.Init()
 	if err != nil {
 		log.Fatalf("error initializing wireguard device: %v", err)
-	}*/
+	}
 
 	return b
 }
 
 func (b *Broker) StartListeners() {
 	// start nats
-	b.registerPublisher()
+	b.RegisterPublisher()
 
 	// start grpc server
 	b.registerGrpc()
@@ -64,30 +63,66 @@ func (b *Broker) registerGrpc() {
 	log.Println("grpc server started")
 }
 
-func (b *Broker) registerPublisher() {
-	nc, err := nats.Connect(natsHost)
+// Implement the gRPC inerface
+func (b *Broker) RegisterPeer(ctx context.Context, peer *pb.RegisterPeerRequest) (*pb.RegisterPeerResponse, error) {
+	log.Info("registering peer")
+
+	b.mutex.Lock()
+	defer b.mutex.Unlock()
+	err := b.addPeerToLocalConfig(peer)
 	if err != nil {
-		log.Fatalf("error connecting to nats: %v", err)
+		log.Info("error adding peer to local config: %v", err)
+		return &pb.RegisterPeerResponse{}, err
 	}
 
-	conn, err := nats.NewEncodedConn(nc, nats.JSON_ENCODER)
+	// publish to nats
+	ctx = context.TODO()
+	peers, err := b.cable.GetPeers(ctx)
 	if err != nil {
-		log.Fatalf("error connecting to nats: %v", err)
+		log.Info("error getting peers from local config: %v", err)
+		return &pb.RegisterPeerResponse{}, err
 	}
 
-	b.publisher = conn
-	log.Println("connected to nats")
+	b.BroadcastPeers(peers)
+	return &pb.RegisterPeerResponse{}, nil
 }
 
-// Implement the gRPC interface
-func (b *Broker) RegisterPeer(ctx context.Context, peer *pb.RegisterPeersRequest) (*pb.RegisterPeersResponse, error) {
-	log.Printf("Registering peer: %v", peer)
-	return &pb.RegisterPeersResponse{}, nil
-}
-
-func (b *Broker) UnregisterPeer(ctx context.Context, peer *pb.UnregisterPeersRequest) (*pb.UnregisterPeersResponse, error) {
+func (b *Broker) UnregisterPeer(ctx context.Context, peer *pb.UnregisterPeerRequest) (*pb.UnregisterPeerResponse, error) {
 	log.Printf("Unregistering peer: %v", peer)
-	return &pb.UnregisterPeersResponse{}, nil
+
+	b.mutex.Lock()
+	defer b.mutex.Unlock()
+
+	err := b.removePeerFromLocalConfig(peer)
+	if err != nil {
+		log.Printf("error removing peer from local config: %v", err)
+		return &pb.UnregisterPeerResponse{}, err
+	}
+
+	// publish to nats
+	ctx = context.TODO()
+	peers, err := b.cable.GetPeers(ctx)
+	if err != nil {
+		log.Info("error getting peers from local config: %v", err)
+		return &pb.UnregisterPeerResponse{}, err
+	}
+
+	b.BroadcastPeers(peers)
+	return &pb.UnregisterPeerResponse{}, nil
+}
+
+func (b *Broker) addPeerToLocalConfig(peer *pb.RegisterPeerRequest) error {
+	log.Printf("adding peer %s to local config", peer.DeviceName)
+	ctx := context.TODO()
+	conf := cable.ProtobufPeerToConfig(peer.Peer)
+
+	return b.cable.RegisterPeer(ctx, peer.DeviceName, conf)
+}
+
+func (b *Broker) removePeerFromLocalConfig(peer *pb.UnregisterPeerRequest) error {
+	log.Printf("removing peer %s from local config", peer.DeviceName)
+	ctx := context.TODO()
+	return b.cable.DeletePeer(ctx, peer.DeviceName, peer.PublicKey)
 }
 
 /*
