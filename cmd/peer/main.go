@@ -9,10 +9,11 @@ import (
 func main() {
 
 	cableType := flag.String("cable", "wg", "peer connection cable type")
+	brokerHost := flag.String("broker", "localhost", "broker host")
 
 	flag.Parse()
 
-	p := peer.NewPeer(*cableType)
+	p := peer.NewPeer(*cableType, *brokerHost)
 	p.RegisterSelf()
 
 	p.SubscribeToOverlayUpdates()

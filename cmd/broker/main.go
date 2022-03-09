@@ -8,10 +8,11 @@ import (
 func main() {
 
 	cableType := flag.String("cable", "wireguard", "peer connection cable type")
+	natsHost := flag.String("nats", "localhost", "nats host")
 
 	flag.Parse()
 
-	b := broker.NewBroker(*cableType)
+	b := broker.NewBroker(*cableType, *natsHost)
 
 	b.StartListeners()
 }

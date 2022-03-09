@@ -1,13 +1,15 @@
 package pubsub
 
 import (
+	"fmt"
+
 	"github.com/nats-io/nats.go"
 	log "github.com/sirupsen/logrus"
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 )
 
 const (
-	natsHost  = "localhost:4222"
+	natsPort  = 4222
 	PeerNodes = "network-peer-nodes"
 )
 
@@ -15,8 +17,9 @@ type Publisher struct {
 	conn *nats.EncodedConn
 }
 
-func (p *Publisher) RegisterPublisher() {
-	nc, err := nats.Connect(natsHost)
+func (p *Publisher) RegisterPublisher(natsHost string) {
+	natsAddr := fmt.Sprintf("%s:%d", natsHost, natsPort)
+	nc, err := nats.Connect(natsAddr)
 	if err != nil {
 		log.Fatalf("error connecting to nats: %v", err)
 	}
@@ -43,8 +46,9 @@ type Subscriber struct {
 	subConn *nats.EncodedConn
 }
 
-func (s *Subscriber) RegisterNatsSubscriber() {
-	nc, err := nats.Connect(natsHost)
+func (s *Subscriber) RegisterNatsSubscriber(natsHost string) {
+	natsAddr := fmt.Sprintf("%s:%d", natsHost, natsPort)
+	nc, err := nats.Connect(natsAddr)
 	if err != nil {
 		log.Fatalf("error connecting to nats server: %v", err)
 	}

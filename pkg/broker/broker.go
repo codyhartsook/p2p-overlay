@@ -22,11 +22,14 @@ type Broker struct {
 	cable cable.Cable
 	pubsub.Publisher
 	pb.UnimplementedPeersServer
-	mutex *sync.RWMutex
+	mutex    *sync.RWMutex
+	natsHost string
 }
 
-func NewBroker(peerCableType string) *Broker {
+func NewBroker(peerCableType string, brokerHost string) *Broker {
 	b := &Broker{mutex: &sync.RWMutex{}}
+
+	b.natsHost = brokerHost
 
 	// start tunnel cable
 	b.cable = cable.NewCable(peerCableType)
@@ -41,7 +44,7 @@ func NewBroker(peerCableType string) *Broker {
 
 func (b *Broker) StartListeners() {
 	// start nats
-	b.RegisterPublisher()
+	b.RegisterPublisher(b.natsHost)
 
 	// start grpc server
 	b.registerGrpc()

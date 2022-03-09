@@ -2,6 +2,7 @@ package peer
 
 import (
 	"context"
+	"fmt"
 	"p2p-overlay/pkg/cable"
 	"p2p-overlay/pkg/pubsub"
 	"time"
@@ -15,18 +16,22 @@ import (
 )
 
 const (
-	grpcAddr = "localhost:4224"
-	natsAddr = "localhost:4222"
+	grpcPort = 4224
 )
 
 type Peer struct {
 	cable      cable.Cable
 	grpcClient pb.PeersClient
 	pubsub.Subscriber
+	natsHost string
+	grpcAddr string
 }
 
-func NewPeer(peerCableType string) *Peer {
+func NewPeer(peerCableType, brokerHost string) *Peer {
 	p := &Peer{}
+
+	p.natsHost = brokerHost
+	p.grpcAddr = fmt.Sprintf("%s:%d", brokerHost, grpcPort)
 
 	p.cable = cable.NewCable(peerCableType)
 
@@ -36,14 +41,14 @@ func NewPeer(peerCableType string) *Peer {
 	}
 
 	p.connectToBroker()
-	p.RegisterNatsSubscriber()
+	p.RegisterNatsSubscriber(p.natsHost)
 
 	return p
 }
 
 func (p *Peer) connectToBroker() {
 	// Set up a connection to the server.
-	conn, err := grpc.Dial(grpcAddr, grpc.WithInsecure(), grpc.WithBlock())
+	conn, err := grpc.Dial(p.grpcAddr, grpc.WithInsecure(), grpc.WithBlock())
 	if err != nil {
 		log.Fatalf("did not connect: %v", err)
 	}
