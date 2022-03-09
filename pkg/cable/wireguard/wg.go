@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"os/exec"
 	"runtime"
 	"sync"
 
@@ -31,9 +32,13 @@ type WGCtrl struct {
 func NewWGCtrl() (*WGCtrl, error) {
 	w := WGCtrl{}
 
+	log.Info("creating wg link")
+
 	if err := w.addLink(); err != nil {
 		return nil, errors.Wrap(err, "failed to setup WireGuard link")
 	}
+
+	log.Info("creating wg client")
 
 	// Create the controller
 	var err error
@@ -215,7 +220,9 @@ func (w *WGCtrl) addLink() error {
 	var err error
 	switch runtime.GOOS {
 	case "linux":
-		err = w.setWGLink()
+		err = w.setLinuxWGLink()
+	case "darwin":
+		err = w.setDarwinWGLink()
 	default:
 		log.Fatalf("unsupported OS: %s", runtime.GOOS)
 	}
@@ -223,7 +230,15 @@ func (w *WGCtrl) addLink() error {
 	return err
 }
 
-func (w *WGCtrl) setWGLink() error {
+func (w *WGCtrl) setDarwinWGLink() error {
+	err := exec.Command("ip", "link", "set", DefaultDeviceName, "type", "wireguard").Run()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (w *WGCtrl) setLinuxWGLink() error {
 	// delete existing wg device if needed
 	if link, err := netlink.LinkByName(DefaultDeviceName); err == nil {
 		// delete existing device

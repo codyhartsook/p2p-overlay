@@ -7,7 +7,7 @@ import (
 
 func main() {
 
-	cableType := flag.String("cable", "wg", "peer connection cable type")
+	cableType := flag.String("cable", "wireguard", "peer connection cable type")
 
 	flag.Parse()
 
