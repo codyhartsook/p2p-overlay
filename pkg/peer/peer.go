@@ -58,7 +58,7 @@ func (p *Peer) SubscribeToOverlayUpdates() {
 	p.SubscribeToChannels(p.updateLocalPeers)
 }
 
-func (p *Peer) updateLocalPeers(peers []wgtypes.Peer) {
+func (p *Peer) updateLocalPeers(peers []wgtypes.PeerConfig) {
 	log.Printf("updating peers in local config")
 	ctx := context.TODO()
 
@@ -79,7 +79,7 @@ func (p *Peer) RegisterSelf() {
 	ctx = context.TODO()
 	brokerConf := cable.ProtobufPeerToConfig(brokerRes.Peer)
 
-	p.cable.RegisterPeer(ctx, brokerRes.DeviceName, brokerConf)
+	p.cable.RegisterPeer(ctx, brokerConf)
 }
 
 func (p *Peer) UnRegisterSelf() {

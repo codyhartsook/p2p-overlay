@@ -67,8 +67,6 @@ func (b *Broker) registerGrpc() {
 func (b *Broker) RegisterPeer(ctx context.Context, peer *pb.RegisterPeerRequest) (*pb.RegisterPeerResponse, error) {
 	log.Info("registering peer")
 
-	b.mutex.Lock()
-	defer b.mutex.Unlock()
 	err := b.addPeerToLocalConfig(peer)
 	if err != nil {
 		log.Info("error adding peer to local config: %v", err)
@@ -112,26 +110,15 @@ func (b *Broker) UnregisterPeer(ctx context.Context, peer *pb.UnregisterPeerRequ
 }
 
 func (b *Broker) addPeerToLocalConfig(peer *pb.RegisterPeerRequest) error {
-	log.Printf("adding peer %s to local config", peer.DeviceName)
+	log.Printf("adding peer %s to local config", peer)
 	ctx := context.TODO()
 	conf := cable.ProtobufPeerToConfig(peer.Peer)
 
-	return b.cable.RegisterPeer(ctx, peer.DeviceName, conf)
+	return b.cable.RegisterPeer(ctx, conf)
 }
 
 func (b *Broker) removePeerFromLocalConfig(peer *pb.UnregisterPeerRequest) error {
-	log.Printf("removing peer %s from local config", peer.DeviceName)
+	log.Printf("removing peer %s from local config", peer)
 	ctx := context.TODO()
-	return b.cable.DeletePeer(ctx, peer.DeviceName, peer.PublicKey)
+	return b.cable.DeletePeer(ctx, peer.PublicKey)
 }
-
-/*
-Listen on grpc for new peer requesets
-
-Recieve peer config and register new peer
-
-Return self config to new peer
-
-Publish new peer config to peer-subscriber channel
-
-*/

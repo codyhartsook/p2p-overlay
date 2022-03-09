@@ -16,18 +16,18 @@ func (w *Fake) Init() error {
 	return nil
 }
 
-func (w *Fake) RegisterPeer(ctx context.Context, deviceName string, peer wgtypes.PeerConfig) error {
+func (w *Fake) RegisterPeer(ctx context.Context, peer wgtypes.PeerConfig) error {
 	return nil
 }
 
-func (w *Fake) GetPeers(ctx context.Context) ([]wgtypes.Peer, error) {
+func (w *Fake) GetPeers(ctx context.Context) ([]wgtypes.PeerConfig, error) {
 	return nil, nil
 }
 
-func (w *Fake) SyncPeers(ctx context.Context, peers []wgtypes.Peer) error {
+func (w *Fake) SyncPeers(ctx context.Context, peers []wgtypes.PeerConfig) error {
 	return nil
 }
 
-func (w *Fake) DeletePeer(ctx context.Context, deviceName string, publicKey string) error {
+func (w *Fake) DeletePeer(ctx context.Context, publicKey string) error {
 	return nil
 }

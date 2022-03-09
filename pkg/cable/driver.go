@@ -14,10 +14,10 @@ import (
 )
 
 type Cable interface {
-	RegisterPeer(ctx context.Context, deviceName string, peer wgtypes.PeerConfig) error
-	GetPeers(ctx context.Context) ([]wgtypes.Peer, error)
-	SyncPeers(ctx context.Context, peers []wgtypes.Peer) error
-	DeletePeer(ctx context.Context, deviceName string, publicKey string) error
+	RegisterPeer(ctx context.Context, peer wgtypes.PeerConfig) error
+	GetPeers(ctx context.Context) ([]wgtypes.PeerConfig, error)
+	SyncPeers(ctx context.Context, peers []wgtypes.PeerConfig) error
+	DeletePeer(ctx context.Context, publicKey string) error
 	Init() error
 }
 

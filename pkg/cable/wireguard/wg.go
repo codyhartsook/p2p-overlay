@@ -114,13 +114,12 @@ func (w *WGCtrl) Init() error {
 	return nil
 }
 
-func (w *WGCtrl) RegisterPeer(ctx context.Context, deviceName string, peer wgtypes.PeerConfig) error {
+func (w *WGCtrl) RegisterPeer(ctx context.Context, peer wgtypes.PeerConfig) error {
 	w.mutex.Lock()
 	defer w.mutex.Unlock()
 
 	peers := []wgtypes.PeerConfig{peer}
-
-	err := w.client.ConfigureDevice(deviceName, wgtypes.Config{
+	err := w.client.ConfigureDevice(DefaultDeviceName, wgtypes.Config{
 		ReplacePeers: false,
 		Peers:        peers,
 	})
@@ -128,28 +127,58 @@ func (w *WGCtrl) RegisterPeer(ctx context.Context, deviceName string, peer wgtyp
 		return err
 	}
 
-	for _, peer := range peers {
-		// verify peer was added
-		if p, err := w.peerByKey(&peer.PublicKey); err != nil {
-			log.Errorf("Failed to verify peer configuration: %v", err)
-		} else {
-			// TODO verify configuration
-			log.Infof("Peer configured, PubKey:%s, EndPoint:%s, AllowedIPs:%v", p.PublicKey, p.Endpoint, p.AllowedIPs)
-		}
+	// verify peer was added
+	if p, err := w.peerByKey(&peer.PublicKey); err != nil {
+		log.Errorf("Failed to verify peer configuration: %v", err)
+	} else {
+		// TODO verify configuration
+		log.Infof("Peer configured, PubKey:%s, EndPoint:%s, AllowedIPs:%v", p.PublicKey, p.Endpoint, p.AllowedIPs)
 	}
 
 	return nil
 }
 
-func (w *WGCtrl) GetPeers(ctx context.Context) ([]wgtypes.Peer, error) {
+func (w *WGCtrl) GetPeers(ctx context.Context) ([]wgtypes.PeerConfig, error) {
 	return nil, nil
 }
 
-func (w *WGCtrl) SyncPeers(ctx context.Context, peers []wgtypes.Peer) error {
+func (w *WGCtrl) SyncPeers(ctx context.Context, peers []wgtypes.PeerConfig) error {
+	w.mutex.Lock()
+	defer w.mutex.Unlock()
+
+	err := w.client.ConfigureDevice(DefaultDeviceName, wgtypes.Config{
+		ReplacePeers: false,
+		Peers:        peers,
+	})
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
-func (w *WGCtrl) DeletePeer(ctx context.Context, deviceName string, publicKey string) error {
+func (w *WGCtrl) DeletePeer(ctx context.Context, publicKey string) error {
+	key, err := wgtypes.ParseKey(publicKey)
+	if err != nil {
+		return errors.Wrapf(err, "failed to parse public key %s", publicKey)
+	}
+
+	peerCfg := []wgtypes.PeerConfig{
+		{
+			PublicKey: key,
+			Remove:    true,
+		},
+	}
+
+	err = w.client.ConfigureDevice(DefaultDeviceName, wgtypes.Config{
+		ReplacePeers: false,
+		Peers:        peerCfg,
+	})
+
+	if err != nil {
+		return errors.Wrapf(err, "failed to remove WireGuard peer with key %s", key)
+	}
+
+	log.Infof("Removed WireGuard peer with key %s", key)
 	return nil
 }
 
