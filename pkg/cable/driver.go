@@ -2,6 +2,7 @@ package cable
 
 import (
 	"context"
+	"net"
 
 	pb "p2p-overlay/pkg/grpc"
 
@@ -14,11 +15,19 @@ import (
 )
 
 type Cable interface {
+	GetLocalConfig() wgtypes.PeerConfig
 	RegisterPeer(ctx context.Context, peer wgtypes.PeerConfig) error
 	GetPeers(ctx context.Context) ([]wgtypes.PeerConfig, error)
 	SyncPeers(ctx context.Context, peers []wgtypes.PeerConfig) error
+	ProtobufToPeerConfig(peer *pb.Peer) (wgtypes.PeerConfig, error)
+	PeerConfigToProtobuf(conf wgtypes.PeerConfig) (*pb.Peer, error)
 	DeletePeer(ctx context.Context, publicKey string) error
 	Init() error
+}
+
+type LocalInfo interface {
+	GetLocalIp() net.IP
+	GetLocalPort() int
 }
 
 const (
@@ -42,8 +51,4 @@ func NewCable(cableType string) Cable {
 	}
 
 	return nil
-}
-
-func ProtobufPeerToConfig(peer *pb.Peer) wgtypes.PeerConfig {
-	return wgtypes.PeerConfig{}
 }

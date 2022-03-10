@@ -3,26 +3,20 @@ syntax = "proto3";
 option go_package = "p2p-overlay/pkg/grpc";
 
 service Peers {
-    rpc RegisterPeer (RegisterPeerRequest) returns (RegisterPeerResponse);
+    rpc RegisterPeer (Peer) returns (RegisterPeerResponse);
     rpc UnregisterPeer (UnregisterPeerRequest) returns (UnregisterPeerResponse);
 }
 
-message RegisterPeerRequest {
-    string device_name = 1;
-    Peer peer = 2;
-}
-
 message RegisterPeerResponse {
-    string device_name = 1;
-    Peer peer = 2;
+    bool success = 1;
 }
 
 message UnregisterPeerRequest {
-    string device_name = 1;
     string public_key = 2;
 }
 
 message UnregisterPeerResponse {
+    bool success = 1;
 }
 
 enum UDPNetworkType {

@@ -18,7 +18,7 @@ const _ = grpc.SupportPackageIsVersion7
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type PeersClient interface {
-	RegisterPeer(ctx context.Context, in *RegisterPeerRequest, opts ...grpc.CallOption) (*RegisterPeerResponse, error)
+	RegisterPeer(ctx context.Context, in *Peer, opts ...grpc.CallOption) (*RegisterPeerResponse, error)
 	UnregisterPeer(ctx context.Context, in *UnregisterPeerRequest, opts ...grpc.CallOption) (*UnregisterPeerResponse, error)
 }
 
@@ -30,7 +30,7 @@ func NewPeersClient(cc grpc.ClientConnInterface) PeersClient {
 	return &peersClient{cc}
 }
 
-func (c *peersClient) RegisterPeer(ctx context.Context, in *RegisterPeerRequest, opts ...grpc.CallOption) (*RegisterPeerResponse, error) {
+func (c *peersClient) RegisterPeer(ctx context.Context, in *Peer, opts ...grpc.CallOption) (*RegisterPeerResponse, error) {
 	out := new(RegisterPeerResponse)
 	err := c.cc.Invoke(ctx, "/Peers/RegisterPeer", in, out, opts...)
 	if err != nil {
@@ -52,7 +52,7 @@ func (c *peersClient) UnregisterPeer(ctx context.Context, in *UnregisterPeerRequ
 // All implementations must embed UnimplementedPeersServer
 // for forward compatibility
 type PeersServer interface {
-	RegisterPeer(context.Context, *RegisterPeerRequest) (*RegisterPeerResponse, error)
+	RegisterPeer(context.Context, *Peer) (*RegisterPeerResponse, error)
 	UnregisterPeer(context.Context, *UnregisterPeerRequest) (*UnregisterPeerResponse, error)
 	mustEmbedUnimplementedPeersServer()
 }
@@ -61,7 +61,7 @@ type PeersServer interface {
 type UnimplementedPeersServer struct {
 }
 
-func (UnimplementedPeersServer) RegisterPeer(context.Context, *RegisterPeerRequest) (*RegisterPeerResponse, error) {
+func (UnimplementedPeersServer) RegisterPeer(context.Context, *Peer) (*RegisterPeerResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RegisterPeer not implemented")
 }
 func (UnimplementedPeersServer) UnregisterPeer(context.Context, *UnregisterPeerRequest) (*UnregisterPeerResponse, error) {
@@ -81,7 +81,7 @@ func RegisterPeersServer(s grpc.ServiceRegistrar, srv PeersServer) {
 }
 
 func _Peers_RegisterPeer_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(RegisterPeerRequest)
+	in := new(Peer)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -93,7 +93,7 @@ func _Peers_RegisterPeer_Handler(srv interface{}, ctx context.Context, dec func(
 		FullMethod: "/Peers/RegisterPeer",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(PeersServer).RegisterPeer(ctx, req.(*RegisterPeerRequest))
+		return srv.(PeersServer).RegisterPeer(ctx, req.(*Peer))
 	}
 	return interceptor(ctx, in, info, handler)
 }

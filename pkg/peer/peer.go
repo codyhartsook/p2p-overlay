@@ -75,16 +75,20 @@ func (p *Peer) RegisterSelf() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*60)
 	defer cancel()
 
-	req := pb.RegisterPeerRequest{}
-	brokerRes, err := p.grpcClient.RegisterPeer(ctx, &req)
+	conf := p.cable.GetLocalConfig()
+	req, err := p.cable.PeerConfigToProtobuf(conf)
+	if err != nil {
+		log.Printf("error converting peer config to protobuf: %v", err)
+	}
+
+	brokerRes, err := p.grpcClient.RegisterPeer(ctx, req)
 	if err != nil {
 		log.Fatalf("could not register: %v", err)
 	}
 
-	ctx = context.TODO()
-	brokerConf := cable.ProtobufPeerToConfig(brokerRes.Peer)
-
-	p.cable.RegisterPeer(ctx, brokerConf)
+	if !brokerRes.Success {
+		log.Fatalf("broker rejected peer registration")
+	}
 }
 
 func (p *Peer) UnRegisterSelf() {

@@ -67,8 +67,8 @@ func (b *Broker) registerGrpc() {
 }
 
 // Implement the gRPC inerface
-func (b *Broker) RegisterPeer(ctx context.Context, peer *pb.RegisterPeerRequest) (*pb.RegisterPeerResponse, error) {
-	log.Info("registering peer")
+func (b *Broker) RegisterPeer(ctx context.Context, peer *pb.Peer) (*pb.RegisterPeerResponse, error) {
+	log.Info("Registering peer...")
 
 	err := b.addPeerToLocalConfig(peer)
 	if err != nil {
@@ -84,6 +84,9 @@ func (b *Broker) RegisterPeer(ctx context.Context, peer *pb.RegisterPeerRequest)
 		return &pb.RegisterPeerResponse{}, err
 	}
 
+	myConf := b.cable.GetLocalConfig()
+	peers = append(peers, myConf)
+
 	b.BroadcastPeers(peers)
 	return &pb.RegisterPeerResponse{}, nil
 }
@@ -94,7 +97,8 @@ func (b *Broker) UnregisterPeer(ctx context.Context, peer *pb.UnregisterPeerRequ
 	b.mutex.Lock()
 	defer b.mutex.Unlock()
 
-	err := b.removePeerFromLocalConfig(peer)
+	innerCtx := context.TODO()
+	err := b.cable.DeletePeer(innerCtx, peer.PublicKey)
 	if err != nil {
 		log.Printf("error removing peer from local config: %v", err)
 		return &pb.UnregisterPeerResponse{}, err
@@ -112,16 +116,14 @@ func (b *Broker) UnregisterPeer(ctx context.Context, peer *pb.UnregisterPeerRequ
 	return &pb.UnregisterPeerResponse{}, nil
 }
 
-func (b *Broker) addPeerToLocalConfig(peer *pb.RegisterPeerRequest) error {
+func (b *Broker) addPeerToLocalConfig(peer *pb.Peer) error {
 	log.Printf("adding peer %s to local config", peer)
 	ctx := context.TODO()
-	conf := cable.ProtobufPeerToConfig(peer.Peer)
+	conf, err := b.cable.ProtobufToPeerConfig(peer)
+	if err != nil {
+		log.Printf("error converting protobuf peer to config: %v", err)
+		return err
+	}
 
 	return b.cable.RegisterPeer(ctx, conf)
-}
-
-func (b *Broker) removePeerFromLocalConfig(peer *pb.UnregisterPeerRequest) error {
-	log.Printf("removing peer %s from local config", peer)
-	ctx := context.TODO()
-	return b.cable.DeletePeer(ctx, peer.PublicKey)
 }

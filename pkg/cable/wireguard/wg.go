@@ -2,12 +2,18 @@ package wireguard
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"net"
 	"os"
 	"os/exec"
 	"runtime"
+	"strconv"
+	"strings"
 	"sync"
+	"time"
+
+	pb "p2p-overlay/pkg/grpc"
 
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
@@ -17,28 +23,35 @@ import (
 )
 
 const (
-	port              = 4500
+	port = 4500
+
 	DefaultDeviceName = "wg-overlay"
 	PublicKey         = "publicKey"
+
+	// KeepAliveInterval to use for wg peers.
+	KeepAliveInterval = 10 * time.Second
 )
+
+type specification struct {
+	PSK      string `default:"default psk"`
+	NATTPort int    `default:"4500"`
+}
 
 type WGCtrl struct {
 	client *wgctrl.Client
 	link   netlink.Link
 	mutex  sync.Mutex
 	keys   map[string]string
+	psk    *wgtypes.Key
+	spec   *specification
 }
 
 func NewWGCtrl() (*WGCtrl, error) {
 	w := WGCtrl{}
 
-	log.Info("creating wg link")
-
 	if err := w.addLink(); err != nil {
 		return nil, errors.Wrap(err, "failed to setup WireGuard link")
 	}
-
-	log.Info("creating wg client")
 
 	// Create the controller
 	var err error
@@ -52,7 +65,13 @@ func NewWGCtrl() (*WGCtrl, error) {
 
 	log.Info("WireGuard client created")
 
-	var priv, pub wgtypes.Key
+	var priv, pub, psk wgtypes.Key
+	if psk, err = genPsk(w.spec.PSK); err != nil {
+		return nil, errors.Wrap(err, "error generating pre-shared key")
+	}
+
+	w.psk = &psk
+
 	if priv, err = wgtypes.GeneratePrivateKey(); err != nil {
 		return nil, errors.Wrap(err, "error generating private key")
 	}
@@ -73,21 +92,17 @@ func NewWGCtrl() (*WGCtrl, error) {
 		Peers:        peerConfigs,
 	}
 
-	log.Info("Configuring WireGuard device")
 	if err = w.client.ConfigureDevice(DefaultDeviceName, cfg); err != nil {
 		return nil, errors.Wrap(err, "failed to configure WireGuard device")
 	}
 
-	log.Infof("Created WireGuard %s with publicKey %s", DefaultDeviceName, pub)
+	log.Infof("Created local wg device %s with publicKey %s", DefaultDeviceName, pub)
 
 	return &w, nil
 }
 
 func (w *WGCtrl) Init() error {
-	w.mutex.Lock()
-	defer w.mutex.Unlock()
-
-	log.Infof("Initializing WireGuard device")
+	log.Infof("Initializing wg device")
 
 	l, err := net.InterfaceByName(DefaultDeviceName)
 	if err != nil {
@@ -147,6 +162,13 @@ func (w *WGCtrl) GetPeers(ctx context.Context) ([]wgtypes.PeerConfig, error) {
 	return nil, nil
 }
 
+func (w *WGCtrl) GetLocalConfig() wgtypes.PeerConfig {
+	dev, _ := w.client.Device(DefaultDeviceName)
+	conf := wgtypes.PeerConfig{PublicKey: dev.PublicKey}
+
+	return conf
+}
+
 func (w *WGCtrl) SyncPeers(ctx context.Context, peers []wgtypes.PeerConfig) error {
 	w.mutex.Lock()
 	defer w.mutex.Unlock()
@@ -202,6 +224,64 @@ func (w *WGCtrl) peerByKey(key *wgtypes.Key) (*wgtypes.Peer, error) {
 	return nil, fmt.Errorf("peer not found for key %s", key)
 }
 
+func (w *WGCtrl) PeerConfigToProtobuf(conf wgtypes.PeerConfig) (*pb.Peer, error) {
+	peer := &pb.Peer{}
+	return peer, nil
+}
+
+func (w *WGCtrl) ProtobufToPeerConfig(peer *pb.Peer) (wgtypes.PeerConfig, error) {
+	log.Printf("converting protobuf peer to wireguard peer config: %v", peer)
+
+	key, err := wgtypes.ParseKey(peer.PublicKey)
+	if err != nil {
+		return wgtypes.PeerConfig{}, errors.Wrapf(err, "failed to parse public key %s", key)
+	}
+
+	remoteIP := net.ParseIP(strings.Split(peer.Endpoint, ":")[0])
+	if remoteIP == nil {
+		return wgtypes.PeerConfig{}, errors.Wrapf(err, "failed to parse ip %s", remoteIP)
+	}
+	remotePort, err := strconv.Atoi(strings.Split(peer.Endpoint, ":")[1])
+	if err != nil {
+		return wgtypes.PeerConfig{}, errors.Wrapf(err, "failed to parse port %s", port)
+	}
+
+	ka := KeepAliveInterval
+	allowedIps := parseSubnets(peer.AllowedIps)
+	pc := wgtypes.PeerConfig{
+		PublicKey:    key,
+		Remove:       false,
+		UpdateOnly:   false,
+		PresharedKey: w.psk,
+		Endpoint: &net.UDPAddr{
+			IP:   remoteIP,
+			Port: remotePort,
+		},
+		PersistentKeepaliveInterval: &ka,
+		AllowedIPs:                  allowedIps,
+		ReplaceAllowedIPs:           false,
+	}
+
+	return pc, nil
+}
+
+func parseSubnets(subnets []string) []net.IPNet {
+	nets := make([]net.IPNet, 0, len(subnets))
+
+	for _, sn := range subnets {
+		_, cidr, err := net.ParseCIDR(sn)
+		if err != nil {
+			// This should not happen. Log and continue.
+			log.Errorf("failed to parse subnet %s: %v", sn, err)
+			continue
+		}
+
+		nets = append(nets, *cidr)
+	}
+
+	return nets
+}
+
 func keyFromMap(keys map[string]string) (*wgtypes.Key, error) {
 	s, found := keys[PublicKey]
 	if !found {
@@ -214,6 +294,12 @@ func keyFromMap(keys map[string]string) (*wgtypes.Key, error) {
 	}
 
 	return &key, nil
+}
+
+func genPsk(psk string) (wgtypes.Key, error) {
+	// Convert spec PSK string to right length byte array, using sha256.Size == wgtypes.KeyLen.
+	pskBytes := sha256.Sum256([]byte(psk))
+	return wgtypes.NewKey(pskBytes[:]) // nolint:wrapcheck // Let the caller wrap it
 }
 
 func (w *WGCtrl) addLink() error {

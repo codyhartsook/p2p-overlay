@@ -8,7 +8,7 @@ import (
 
 func main() {
 
-	cableType := flag.String("cable", "wg", "peer connection cable type")
+	cableType := flag.String("cable", "wireguard", "peer connection cable type")
 	brokerHost := flag.String("broker", "localhost", "broker host")
 
 	flag.Parse()
