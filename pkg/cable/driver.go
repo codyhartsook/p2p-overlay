@@ -16,12 +16,19 @@ import (
 
 type Cable interface {
 	GetLocalConfig() wgtypes.PeerConfig
+
 	RegisterPeer(ctx context.Context, peer wgtypes.PeerConfig) error
+
 	GetPeers(ctx context.Context) ([]wgtypes.PeerConfig, error)
+
 	SyncPeers(ctx context.Context, peers []wgtypes.PeerConfig) error
+
 	ProtobufToPeerConfig(peer *pb.Peer) (wgtypes.PeerConfig, error)
+
 	PeerConfigToProtobuf(conf wgtypes.PeerConfig) (*pb.Peer, error)
+
 	DeletePeer(ctx context.Context, publicKey string) error
+
 	Init() error
 }
 

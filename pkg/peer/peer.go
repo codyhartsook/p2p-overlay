@@ -92,5 +92,6 @@ func (p *Peer) RegisterSelf() {
 }
 
 func (p *Peer) UnRegisterSelf() {
-
+	// send grpc request to broker
+	// remove local interfaces
 }

@@ -43,7 +43,7 @@ func NewBroker(peerCableType string, brokerHost string) *Broker {
 }
 
 func (b *Broker) StartListeners() {
-	// start nats
+	// start nats publisher
 	b.RegisterPublisher(b.natsHost)
 
 	// start grpc server
@@ -73,7 +73,7 @@ func (b *Broker) RegisterPeer(ctx context.Context, peer *pb.Peer) (*pb.RegisterP
 	err := b.addPeerToLocalConfig(peer)
 	if err != nil {
 		log.Info("error adding peer to local config: %v", err)
-		return &pb.RegisterPeerResponse{}, err
+		return &pb.RegisterPeerResponse{Success: false}, err
 	}
 
 	// publish to nats
@@ -81,14 +81,14 @@ func (b *Broker) RegisterPeer(ctx context.Context, peer *pb.Peer) (*pb.RegisterP
 	peers, err := b.cable.GetPeers(ctx)
 	if err != nil {
 		log.Info("error getting peers from local config: %v", err)
-		return &pb.RegisterPeerResponse{}, err
+		return &pb.RegisterPeerResponse{Success: false}, err
 	}
 
 	myConf := b.cable.GetLocalConfig()
 	peers = append(peers, myConf)
 
 	b.BroadcastPeers(peers)
-	return &pb.RegisterPeerResponse{}, nil
+	return &pb.RegisterPeerResponse{Success: true}, nil
 }
 
 func (b *Broker) UnregisterPeer(ctx context.Context, peer *pb.UnregisterPeerRequest) (*pb.UnregisterPeerResponse, error) {
@@ -101,7 +101,7 @@ func (b *Broker) UnregisterPeer(ctx context.Context, peer *pb.UnregisterPeerRequ
 	err := b.cable.DeletePeer(innerCtx, peer.PublicKey)
 	if err != nil {
 		log.Printf("error removing peer from local config: %v", err)
-		return &pb.UnregisterPeerResponse{}, err
+		return &pb.UnregisterPeerResponse{Success: false}, err
 	}
 
 	// publish to nats
@@ -109,11 +109,11 @@ func (b *Broker) UnregisterPeer(ctx context.Context, peer *pb.UnregisterPeerRequ
 	peers, err := b.cable.GetPeers(ctx)
 	if err != nil {
 		log.Info("error getting peers from local config: %v", err)
-		return &pb.UnregisterPeerResponse{}, err
+		return &pb.UnregisterPeerResponse{Success: false}, err
 	}
 
 	b.BroadcastPeers(peers)
-	return &pb.UnregisterPeerResponse{}, nil
+	return &pb.UnregisterPeerResponse{Success: true}, nil
 }
 
 func (b *Broker) addPeerToLocalConfig(peer *pb.Peer) error {

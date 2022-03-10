@@ -225,7 +225,17 @@ func (w *WGCtrl) peerByKey(key *wgtypes.Key) (*wgtypes.Peer, error) {
 }
 
 func (w *WGCtrl) PeerConfigToProtobuf(conf wgtypes.PeerConfig) (*pb.Peer, error) {
-	peer := &pb.Peer{}
+	allowedIps := make([]string, len(conf.AllowedIPs))
+	for i, ip := range conf.AllowedIPs {
+		allowedIps[i] = ip.String()
+	}
+	peer := &pb.Peer{
+		PublicKey:    conf.PublicKey.String(),
+		Endpoint:     conf.Endpoint.String(),
+		PresharedKey: conf.PresharedKey.String(),
+		AllowedIps:   allowedIps,
+	}
+
 	return peer, nil
 }
 
