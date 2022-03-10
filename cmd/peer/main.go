@@ -16,7 +16,5 @@ func main() {
 	p := peer.NewPeer(*cableType, *brokerHost)
 	p.RegisterSelf()
 
-	p.SubscribeToOverlayUpdates()
-
 	runtime.Goexit()
 }

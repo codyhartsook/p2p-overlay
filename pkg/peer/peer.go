@@ -42,6 +42,7 @@ func NewPeer(peerCableType, brokerHost string) *Peer {
 
 	p.connectToBroker()
 	p.RegisterNatsSubscriber(p.natsHost)
+	p.SubscribeToChannels(p.updateLocalPeers)
 
 	return p
 }
@@ -57,10 +58,6 @@ func (p *Peer) connectToBroker() {
 	p.grpcClient = client
 
 	log.Print("connected to broker over grpc")
-}
-
-func (p *Peer) SubscribeToOverlayUpdates() {
-	p.SubscribeToChannels(p.updateLocalPeers)
 }
 
 func (p *Peer) updateLocalPeers(peers []wgtypes.PeerConfig) {

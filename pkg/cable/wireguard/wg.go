@@ -182,9 +182,19 @@ func (w *WGCtrl) SyncPeers(ctx context.Context, peers []wgtypes.PeerConfig) erro
 	w.mutex.Lock()
 	defer w.mutex.Unlock()
 
+	dev, _ := w.client.Device(DefaultDeviceName)
+
+	filteredPeers := make([]wgtypes.PeerConfig, 0)
+	for _, peer := range peers {
+		if dev.PublicKey == peer.PublicKey {
+			continue
+		}
+		filteredPeers = append(filteredPeers, peer)
+	}
+
 	err := w.client.ConfigureDevice(DefaultDeviceName, wgtypes.Config{
-		ReplacePeers: false,
-		Peers:        peers,
+		ReplacePeers: true,
+		Peers:        filteredPeers,
 	})
 	if err != nil {
 		return err
