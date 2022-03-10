@@ -169,7 +169,7 @@ func (w *WGCtrl) GetPeers(ctx context.Context) ([]wgtypes.PeerConfig, error) {
 func (w *WGCtrl) GetLocalConfig() wgtypes.PeerConfig {
 	ip := endpoint.GetLocalIP()
 
-	allowedIPs := []net.IPNet{addresses.AddressToNet(net.IP(w.address))}
+	allowedIPs := []net.IPNet{addresses.AddressToNet(w.address)}
 
 	dev, _ := w.client.Device(DefaultDeviceName)
 	conf := wgtypes.PeerConfig{
@@ -281,8 +281,14 @@ func (w *WGCtrl) ProtobufToPeerConfig(peer *pb.Peer) (wgtypes.PeerConfig, error)
 		return wgtypes.PeerConfig{}, errors.Wrapf(err, "failed to parse port %s", port)
 	}
 
+	var allowedIPs []net.IPNet
+	if len(peer.AllowedIps) == 0 {
+		allowedIPs = []net.IPNet{addresses.AddressToNet(peer.Address)}
+	} else {
+		allowedIPs = parseSubnets(peer.AllowedIps)
+	}
+
 	ka := KeepAliveInterval
-	allowedIps := parseSubnets(peer.AllowedIps)
 	pc := wgtypes.PeerConfig{
 		PublicKey:    key,
 		Remove:       false,
@@ -293,7 +299,7 @@ func (w *WGCtrl) ProtobufToPeerConfig(peer *pb.Peer) (wgtypes.PeerConfig, error)
 			Port: remotePort,
 		},
 		PersistentKeepaliveInterval: &ka,
-		AllowedIPs:                  allowedIps,
+		AllowedIPs:                  allowedIPs,
 		ReplaceAllowedIPs:           false,
 	}
 

@@ -45,8 +45,6 @@ func (a *AddressDistribution) GetAvailableAddress() (net.IP, error) {
 	a.availableAddresses[0] = a.availableAddresses[len(a.availableAddresses)-1]
 	a.availableAddresses = a.availableAddresses[:len(a.availableAddresses)-1]
 
-	log.Info(a.availableAddresses[0])
-
 	return addr, nil
 }
 
@@ -67,9 +65,10 @@ func (a *AddressDistribution) incrementPeerAddress(currIP string) string {
 	return ip.String()
 }
 
-func AddressToNet(addr net.IP) net.IPNet {
+func AddressToNet(addr string) net.IPNet {
+	ip := net.ParseIP(addr)
 	return net.IPNet{
-		IP:   addr,
+		IP:   ip,
 		Mask: net.CIDRMask(mask, mask),
 	}
 }
