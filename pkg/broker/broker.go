@@ -9,6 +9,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
+	"p2p-overlay/pkg/addresses"
 	pb "p2p-overlay/pkg/grpc"
 
 	"google.golang.org/grpc"
@@ -21,18 +22,23 @@ const (
 type Broker struct {
 	cable cable.Cable
 	pubsub.Publisher
+	addresses.AddressDistribution
 	pb.UnimplementedPeersServer
 	mutex    *sync.RWMutex
 	natsHost string
+	peers    map[string]net.IP
 }
 
 func NewBroker(peerCableType string, brokerHost string) *Broker {
-	b := &Broker{mutex: &sync.RWMutex{}}
+	b := &Broker{mutex: &sync.RWMutex{}, natsHost: brokerHost}
 
-	b.natsHost = brokerHost
+	b.InitializeAddresses()
+	brokerAddr := b.GetLastAddress().String()
+
+	b.peers = make(map[string]net.IP)
 
 	// start tunnel cable
-	b.cable = cable.NewCable(peerCableType)
+	b.cable = cable.NewCable(peerCableType, brokerAddr)
 
 	err := b.cable.Init()
 	if err != nil {
@@ -68,15 +74,29 @@ func (b *Broker) registerGrpc() {
 
 // Implement the gRPC inerface
 func (b *Broker) RegisterPeer(ctx context.Context, peer *pb.Peer) (*pb.RegisterPeerResponse, error) {
-	log.Info("Registering peer...")
+	b.mutex.Lock()
+	defer b.mutex.Unlock()
 
-	err := b.addPeerToLocalConfig(peer)
+	log.Info("Registering peer...")
+	var err error
+	address, registered := b.peers[peer.PublicKey]
+	if !registered {
+		address, err = b.GetAvailableAddress()
+		if err != nil {
+			log.Printf("error getting available address: %v", err)
+			return &pb.RegisterPeerResponse{Success: false}, err
+		}
+		b.peers[peer.PublicKey] = address
+	}
+
+	peer.Address = address.String()
+	err = b.addPeerToLocalConfig(peer)
 	if err != nil {
 		log.Info("error adding peer to local config: %v", err)
 		return &pb.RegisterPeerResponse{Success: false}, err
 	}
 
-	// publish to nats
+	// broadcast local peers config to nats
 	ctx = context.TODO()
 	peers, err := b.cable.GetPeers(ctx)
 	if err != nil {
@@ -88,7 +108,7 @@ func (b *Broker) RegisterPeer(ctx context.Context, peer *pb.Peer) (*pb.RegisterP
 	peers = append(peers, myConf)
 
 	b.BroadcastPeers(peers)
-	return &pb.RegisterPeerResponse{Success: true}, nil
+	return &pb.RegisterPeerResponse{Success: true, Address: peer.Address}, nil
 }
 
 func (b *Broker) UnregisterPeer(ctx context.Context, peer *pb.UnregisterPeerRequest) (*pb.UnregisterPeerResponse, error) {

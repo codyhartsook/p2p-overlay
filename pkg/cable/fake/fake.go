@@ -10,7 +10,7 @@ import (
 
 type Fake struct{}
 
-func NewFake() (*Fake, error) {
+func NewFake(addr string) (*Fake, error) {
 	return &Fake{}, nil
 }
 

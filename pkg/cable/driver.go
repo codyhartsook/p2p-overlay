@@ -42,16 +42,16 @@ const (
 	fake = "fake"
 )
 
-func NewCable(cableType string) Cable {
+func NewCable(cableType, addr string) Cable {
 	switch cableType {
 	case wg:
-		w, err := W.NewWGCtrl()
+		w, err := W.NewWGCtrl(addr)
 		if err != nil {
 			log.Fatalf("error creating wireguard cable: %v", err)
 		}
 		return w
 	case fake:
-		f, _ := F.NewFake()
+		f, _ := F.NewFake(addr)
 		return f
 	default:
 		log.Fatalf("driver type not matched: %s", cableType)

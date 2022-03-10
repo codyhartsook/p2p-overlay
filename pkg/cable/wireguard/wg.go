@@ -16,6 +16,8 @@ import (
 	"p2p-overlay/pkg/endpoint"
 	pb "p2p-overlay/pkg/grpc"
 
+	"p2p-overlay/pkg/addresses"
+
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
@@ -39,16 +41,17 @@ type specification struct {
 }
 
 type WGCtrl struct {
-	client *wgctrl.Client
-	link   netlink.Link
-	mutex  sync.Mutex
-	keys   map[string]string
-	psk    *wgtypes.Key
-	spec   *specification
+	client  *wgctrl.Client
+	link    netlink.Link
+	mutex   sync.Mutex
+	keys    map[string]string
+	psk     *wgtypes.Key
+	spec    *specification
+	address string
 }
 
-func NewWGCtrl() (*WGCtrl, error) {
-	w := WGCtrl{spec: new(specification)}
+func NewWGCtrl(address string) (*WGCtrl, error) {
+	w := WGCtrl{spec: new(specification), address: address}
 
 	if err := w.addLink(); err != nil {
 		return nil, errors.Wrap(err, "failed to setup WireGuard link")
@@ -166,11 +169,14 @@ func (w *WGCtrl) GetPeers(ctx context.Context) ([]wgtypes.PeerConfig, error) {
 func (w *WGCtrl) GetLocalConfig() wgtypes.PeerConfig {
 	ip := endpoint.GetLocalIP()
 
+	allowedIPs := []net.IPNet{addresses.AddressToNet(net.IP(w.address))}
+
 	dev, _ := w.client.Device(DefaultDeviceName)
 	conf := wgtypes.PeerConfig{
 		PublicKey:    dev.PublicKey,
 		Endpoint:     &net.UDPAddr{IP: ip, Port: port},
 		PresharedKey: w.psk,
+		AllowedIPs:   allowedIPs,
 	}
 
 	log.Info("Local peer config: ", conf)

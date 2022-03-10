@@ -33,7 +33,9 @@ func NewPeer(peerCableType, brokerHost string) *Peer {
 	p.natsHost = brokerHost
 	p.grpcAddr = fmt.Sprintf("%s:%d", brokerHost, grpcPort)
 
-	p.cable = cable.NewCable(peerCableType)
+	var address = "" // we will get this from broker
+
+	p.cable = cable.NewCable(peerCableType, address)
 
 	err := p.cable.Init()
 	if err != nil {
@@ -86,6 +88,8 @@ func (p *Peer) RegisterSelf() {
 	if !brokerRes.Success {
 		log.Fatalf("broker rejected peer registration")
 	}
+
+	log.Printf("tunnel address is %s", brokerRes.Address)
 }
 
 func (p *Peer) UnRegisterSelf() {
