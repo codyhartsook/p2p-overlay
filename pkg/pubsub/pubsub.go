@@ -39,7 +39,7 @@ func (p *Publisher) BroadcastPeers(peers []wgtypes.PeerConfig) {
 		log.Fatalf("error publishing to channel %s: %v", PeerNodes, err)
 	}
 
-	log.Info("published to channel %s", PeerNodes)
+	log.Info("published to channel ", PeerNodes)
 }
 
 type Subscriber struct {

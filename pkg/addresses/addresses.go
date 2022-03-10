@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	baseAddr = "10.0.0.0"
+	baseAddr = "10.0.0.1"
 	maxAddr  = "10.0.0.254"
 	mask     = 32
 )
@@ -32,8 +32,8 @@ func (a *AddressDistribution) InitializeAddresses() {
 	}
 }
 
-func (a *AddressDistribution) GetLastAddress() net.IP {
-	return net.ParseIP(maxAddr)
+func (a *AddressDistribution) GetBrokerAddress() net.IP {
+	return net.ParseIP(baseAddr)
 }
 
 func (a *AddressDistribution) GetAvailableAddress() (net.IP, error) {

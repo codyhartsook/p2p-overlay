@@ -33,7 +33,11 @@ func NewBroker(peerCableType string, brokerHost string) *Broker {
 	b := &Broker{mutex: &sync.RWMutex{}, natsHost: brokerHost}
 
 	b.InitializeAddresses()
-	brokerAddr := b.GetLastAddress().String()
+	brokerAddr := b.GetBrokerAddress().String()
+
+	log.Info("broker address: ", brokerAddr)
+	first, _ := b.GetAvailableAddress()
+	log.Info("first address: ", first.String())
 
 	b.peers = make(map[string]net.IP)
 
@@ -145,6 +149,8 @@ func (b *Broker) addPeerToLocalConfig(peer *pb.Peer) error {
 		log.Printf("error converting protobuf peer to config: %v", err)
 		return err
 	}
+
+	log.Info("allowed-ips ", conf.AllowedIPs)
 
 	return b.cable.RegisterPeer(ctx, conf)
 }

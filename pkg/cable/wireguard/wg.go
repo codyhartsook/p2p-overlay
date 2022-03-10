@@ -281,11 +281,9 @@ func (w *WGCtrl) ProtobufToPeerConfig(peer *pb.Peer) (wgtypes.PeerConfig, error)
 		return wgtypes.PeerConfig{}, errors.Wrapf(err, "failed to parse port %s", port)
 	}
 
-	var allowedIPs []net.IPNet
-	if len(peer.AllowedIps) == 0 {
+	allowedIPs, err := parseSubnets(peer.AllowedIps)
+	if err != nil {
 		allowedIPs = []net.IPNet{addresses.AddressToNet(peer.Address)}
-	} else {
-		allowedIPs = parseSubnets(peer.AllowedIps)
 	}
 
 	ka := KeepAliveInterval
@@ -306,21 +304,23 @@ func (w *WGCtrl) ProtobufToPeerConfig(peer *pb.Peer) (wgtypes.PeerConfig, error)
 	return pc, nil
 }
 
-func parseSubnets(subnets []string) []net.IPNet {
+func parseSubnets(subnets []string) ([]net.IPNet, error) {
 	nets := make([]net.IPNet, 0, len(subnets))
+	var err error
 
 	for _, sn := range subnets {
-		_, cidr, err := net.ParseCIDR(sn)
-		if err != nil {
+		_, cidr, e := net.ParseCIDR(sn)
+		if e != nil {
 			// This should not happen. Log and continue.
 			log.Errorf("failed to parse subnet %s: %v", sn, err)
+			err = e
 			continue
 		}
 
 		nets = append(nets, *cidr)
 	}
 
-	return nets
+	return nets, err
 }
 
 func keyFromMap(keys map[string]string) (*wgtypes.Key, error) {
