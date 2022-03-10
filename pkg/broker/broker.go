@@ -89,6 +89,8 @@ func (b *Broker) RegisterPeer(ctx context.Context, peer *pb.Peer) (*pb.RegisterP
 		b.peers[peer.PublicKey] = address
 	}
 
+	log.Info("Peer address:", address)
+
 	peer.Address = address.String()
 	err = b.addPeerToLocalConfig(peer)
 	if err != nil {

@@ -14,21 +14,21 @@ const (
 )
 
 type AddressDistribution struct {
-	availableAddresses []net.IP
+	availableAddresses []string
 }
 
 func (a *AddressDistribution) InitializeAddresses() {
-	a.availableAddresses = make([]net.IP, 254)
-	currAddr := net.ParseIP(baseAddr)
-	lastAddr := net.ParseIP(maxAddr)
+	a.availableAddresses = make([]string, 0)
+	currAddr := baseAddr
+	lastAddr := maxAddr
 
 	for {
-		a.availableAddresses = append(a.availableAddresses, currAddr)
 		currAddr = a.incrementPeerAddress(currAddr)
-
-		if currAddr.Equal(lastAddr) {
+		if currAddr == lastAddr {
 			break
 		}
+
+		a.availableAddresses = append(a.availableAddresses, currAddr)
 	}
 }
 
@@ -41,19 +41,22 @@ func (a *AddressDistribution) GetAvailableAddress() (net.IP, error) {
 		return nil, fmt.Errorf("no available addresses")
 	}
 
-	addr := a.availableAddresses[0]
+	addr := net.ParseIP(a.availableAddresses[0])
 	a.availableAddresses[0] = a.availableAddresses[len(a.availableAddresses)-1]
 	a.availableAddresses = a.availableAddresses[:len(a.availableAddresses)-1]
+
+	log.Info(a.availableAddresses[0])
 
 	return addr, nil
 }
 
-func (a *AddressDistribution) ReturnAddress(addr net.IP) {
+func (a *AddressDistribution) ReturnAddress(addr string) {
 	a.availableAddresses = append(a.availableAddresses, addr)
 }
 
-func (a *AddressDistribution) incrementPeerAddress(currIP net.IP) net.IP {
-	ip := currIP.To4()
+func (a *AddressDistribution) incrementPeerAddress(currIP string) string {
+	ip := net.ParseIP(currIP)
+	ip = ip.To4()
 
 	if ip == nil {
 		log.Fatalf("error parsing ip: %v", ip)
@@ -61,7 +64,7 @@ func (a *AddressDistribution) incrementPeerAddress(currIP net.IP) net.IP {
 
 	ip[3]++
 
-	return ip
+	return ip.String()
 }
 
 func AddressToNet(addr net.IP) net.IPNet {
