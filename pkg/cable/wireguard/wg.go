@@ -2,10 +2,21 @@ package wireguard
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"net"
+	"os"
+	"os/exec"
 	"runtime"
+	"strconv"
+	"strings"
 	"sync"
+	"time"
+
+	"p2p-overlay/pkg/endpoint"
+	pb "p2p-overlay/pkg/grpc"
+
+	"p2p-overlay/pkg/addresses"
 
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
@@ -15,41 +26,62 @@ import (
 )
 
 const (
-	port              = 4500
+	port = 4500
+
 	DefaultDeviceName = "wg-overlay"
 	PublicKey         = "publicKey"
+
+	// KeepAliveInterval to use for wg peers.
+	KeepAliveInterval = 10 * time.Second
 )
 
+type specification struct {
+	PSK      string `default:"default psk"`
+	NATTPort int    `default:"4500"`
+}
+
 type WGCtrl struct {
-	client wgctrl.Client
-	link   netlink.Link
-	mutex  sync.Mutex
-	keys   map[string]string
+	client  *wgctrl.Client
+	link    netlink.Link
+	mutex   sync.Mutex
+	keys    map[string]string
+	psk     *wgtypes.Key
+	spec    *specification
+	address string
 }
 
 func NewWGCtrl() (*WGCtrl, error) {
-	w := WGCtrl{}
+	w := WGCtrl{spec: new(specification)}
 
 	if err := w.addLink(); err != nil {
 		return nil, errors.Wrap(err, "failed to setup WireGuard link")
 	}
 
-	client, err := wgctrl.New()
-	if err != nil {
-		return nil, err
-	}
+	// Create the controller
+	var err error
+	if w.client, err = wgctrl.New(); err != nil {
+		if os.IsNotExist(err) {
+			return nil, fmt.Errorf("wgctrl is not available on this system")
+		}
 
-	w.client = *client
-	w.keys = make(map[string]string)
+		return nil, errors.Wrap(err, "failed to open wgctl client")
+	}
 
 	log.Info("WireGuard client created")
 
-	var priv, pub wgtypes.Key
+	var priv, pub, psk wgtypes.Key
+	if psk, err = genPsk(w.spec.PSK); err != nil {
+		return nil, errors.Wrap(err, "error generating pre-shared key")
+	}
+
+	w.psk = &psk
+
 	if priv, err = wgtypes.GeneratePrivateKey(); err != nil {
 		return nil, errors.Wrap(err, "error generating private key")
 	}
 
 	pub = priv.PublicKey()
+	w.keys = make(map[string]string)
 	w.keys[PublicKey] = pub.String()
 
 	portInt := int(port)
@@ -64,23 +96,19 @@ func NewWGCtrl() (*WGCtrl, error) {
 		Peers:        peerConfigs,
 	}
 
-	log.Info("Configuring WireGuard device")
 	if err = w.client.ConfigureDevice(DefaultDeviceName, cfg); err != nil {
 		return nil, errors.Wrap(err, "failed to configure WireGuard device")
 	}
 
-	log.Infof("Created WireGuard %s with publicKey %s", DefaultDeviceName, pub)
+	log.Infof("Created local wg device %s with publicKey %s", DefaultDeviceName, pub)
 
 	return &w, nil
 }
 
 func (w *WGCtrl) Init() error {
-	w.mutex.Lock()
-	defer w.mutex.Unlock()
+	log.Infof("Initializing wg device")
 
-	log.Infof("Initializing WireGuard device")
-
-	l, err := net.InterfaceByName(DefaultDeviceName)
+	_, err := net.InterfaceByName(DefaultDeviceName)
 	if err != nil {
 		return errors.Wrapf(err, "cannot get wireguard link by name %s", DefaultDeviceName)
 	}
@@ -104,17 +132,39 @@ func (w *WGCtrl) Init() error {
 		return errors.Wrap(err, "failed to bring up WireGuard device")
 	}
 
-	log.Infof("WireGuard device %s, is up on i/f number %d, listening on port :%d, with key %s",
-		w.link.Attrs().Name, l.Index, d.ListenPort, d.PublicKey)
+	log.Infof("WireGuard device %s is up",
+		w.link.Attrs().Name)
 
 	return nil
 }
 
-func (w *WGCtrl) RegisterPeers(ctx context.Context, deviceName string, peers []wgtypes.PeerConfig) error {
+func (w *WGCtrl) SetAddress(addr string) {
+	w.address = addr
+}
+
+func (w *WGCtrl) AddrAdd() {
+	/*
+		ipNet := addresses.AddressToNet(w.address, 24)
+		addr := &netlink.Addr{IPNet: &ipNet}
+		err := netlink.AddrAdd(w.link, addr)
+		if err != nil {
+			log.Fatalf("Failed to add IP address to interface: %v", err)
+		}*/
+
+	net := fmt.Sprintf("%s/24", w.address)
+
+	err := exec.Command("ip", "addr", "add", net, "dev", DefaultDeviceName).Run()
+	if err != nil {
+		log.Fatalf("Failed to add IP route to interface: %v", err)
+	}
+}
+
+func (w *WGCtrl) RegisterPeer(ctx context.Context, peer wgtypes.PeerConfig) error {
 	w.mutex.Lock()
 	defer w.mutex.Unlock()
 
-	err := w.client.ConfigureDevice(deviceName, wgtypes.Config{
+	peers := []wgtypes.PeerConfig{peer}
+	err := w.client.ConfigureDevice(DefaultDeviceName, wgtypes.Config{
 		ReplacePeers: false,
 		Peers:        peers,
 	})
@@ -122,20 +172,84 @@ func (w *WGCtrl) RegisterPeers(ctx context.Context, deviceName string, peers []w
 		return err
 	}
 
-	for _, peer := range peers {
-		// verify peer was added
-		if p, err := w.peerByKey(&peer.PublicKey); err != nil {
-			log.Errorf("Failed to verify peer configuration: %v", err)
-		} else {
-			// TODO verify configuration
-			log.Infof("Peer configured, PubKey:%s, EndPoint:%s, AllowedIPs:%v", p.PublicKey, p.Endpoint, p.AllowedIPs)
-		}
+	// verify peer was added
+	if p, err := w.peerByKey(&peer.PublicKey); err != nil {
+		log.Errorf("Failed to verify peer configuration: %v", err)
+	} else {
+		// TODO verify configuration
+		log.Infof("Peer configured, PubKey:%s, EndPoint:%s, AllowedIPs:%v", p.PublicKey, p.Endpoint, p.AllowedIPs)
 	}
 
 	return nil
 }
 
-func (w *WGCtrl) DeletePeers(ctx context.Context, deviceName string, publicKeys []string) error {
+func (w *WGCtrl) GetPeers(ctx context.Context) ([]wgtypes.PeerConfig, error) {
+	return nil, nil
+}
+
+func (w *WGCtrl) GetLocalConfig() wgtypes.PeerConfig {
+	ip := endpoint.GetLocalIP()
+
+	allowedIPs := []net.IPNet{addresses.AddressToNet(w.address, 32)}
+
+	dev, _ := w.client.Device(DefaultDeviceName)
+	conf := wgtypes.PeerConfig{
+		PublicKey:    dev.PublicKey,
+		Endpoint:     &net.UDPAddr{IP: ip, Port: port},
+		PresharedKey: w.psk,
+		AllowedIPs:   allowedIPs,
+	}
+
+	return conf
+}
+
+func (w *WGCtrl) SyncPeers(ctx context.Context, peers []wgtypes.PeerConfig) error {
+	w.mutex.Lock()
+	defer w.mutex.Unlock()
+
+	dev, _ := w.client.Device(DefaultDeviceName)
+
+	filteredPeers := make([]wgtypes.PeerConfig, 0)
+	for _, peer := range peers {
+		if dev.PublicKey == peer.PublicKey {
+			continue
+		}
+		filteredPeers = append(filteredPeers, peer)
+	}
+
+	err := w.client.ConfigureDevice(DefaultDeviceName, wgtypes.Config{
+		ReplacePeers: true,
+		Peers:        filteredPeers,
+	})
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (w *WGCtrl) DeletePeer(ctx context.Context, publicKey string) error {
+	key, err := wgtypes.ParseKey(publicKey)
+	if err != nil {
+		return errors.Wrapf(err, "failed to parse public key %s", publicKey)
+	}
+
+	peerCfg := []wgtypes.PeerConfig{
+		{
+			PublicKey: key,
+			Remove:    true,
+		},
+	}
+
+	err = w.client.ConfigureDevice(DefaultDeviceName, wgtypes.Config{
+		ReplacePeers: false,
+		Peers:        peerCfg,
+	})
+
+	if err != nil {
+		return errors.Wrapf(err, "failed to remove WireGuard peer with key %s", key)
+	}
+
+	log.Infof("Removed WireGuard peer with key %s", key)
 	return nil
 }
 
@@ -154,6 +268,80 @@ func (w *WGCtrl) peerByKey(key *wgtypes.Key) (*wgtypes.Peer, error) {
 	return nil, fmt.Errorf("peer not found for key %s", key)
 }
 
+func (w *WGCtrl) PeerConfigToProtobuf(conf wgtypes.PeerConfig) (*pb.Peer, error) {
+	allowedIps := make([]string, len(conf.AllowedIPs))
+	for i, ip := range conf.AllowedIPs {
+		allowedIps[i] = ip.String()
+	}
+	peer := &pb.Peer{
+		PublicKey:    conf.PublicKey.String(),
+		Endpoint:     conf.Endpoint.String(),
+		PresharedKey: conf.PresharedKey.String(),
+		AllowedIps:   allowedIps,
+	}
+
+	return peer, nil
+}
+
+func (w *WGCtrl) ProtobufToPeerConfig(peer *pb.Peer) (wgtypes.PeerConfig, error) {
+	log.Printf("converting protobuf peer to wireguard peer config: %v", peer)
+
+	key, err := wgtypes.ParseKey(peer.PublicKey)
+	if err != nil {
+		return wgtypes.PeerConfig{}, errors.Wrapf(err, "failed to parse public key %s", key)
+	}
+
+	remoteIP := net.ParseIP(strings.Split(peer.Endpoint, ":")[0])
+	if remoteIP == nil {
+		return wgtypes.PeerConfig{}, errors.Wrapf(err, "failed to parse ip %s", remoteIP)
+	}
+	remotePort, err := strconv.Atoi(strings.Split(peer.Endpoint, ":")[1])
+	if err != nil {
+		return wgtypes.PeerConfig{}, errors.Wrapf(err, "failed to parse port %s", port)
+	}
+
+	allowedIPs, err := parseSubnets(peer.AllowedIps)
+	if err != nil {
+		allowedIPs = []net.IPNet{addresses.AddressToNet(peer.Address, 32)}
+	}
+
+	ka := KeepAliveInterval
+	pc := wgtypes.PeerConfig{
+		PublicKey:    key,
+		Remove:       false,
+		UpdateOnly:   false,
+		PresharedKey: w.psk,
+		Endpoint: &net.UDPAddr{
+			IP:   remoteIP,
+			Port: remotePort,
+		},
+		PersistentKeepaliveInterval: &ka,
+		AllowedIPs:                  allowedIPs,
+		ReplaceAllowedIPs:           false,
+	}
+
+	return pc, nil
+}
+
+func parseSubnets(subnets []string) ([]net.IPNet, error) {
+	nets := make([]net.IPNet, 0, len(subnets))
+	var err error
+
+	for _, sn := range subnets {
+		_, cidr, e := net.ParseCIDR(sn)
+		if e != nil {
+			// This should not happen. Log and continue.
+			log.Errorf("failed to parse subnet %s: %v", sn, err)
+			err = e
+			continue
+		}
+
+		nets = append(nets, *cidr)
+	}
+
+	return nets, err
+}
+
 func keyFromMap(keys map[string]string) (*wgtypes.Key, error) {
 	s, found := keys[PublicKey]
 	if !found {
@@ -168,11 +356,19 @@ func keyFromMap(keys map[string]string) (*wgtypes.Key, error) {
 	return &key, nil
 }
 
+func genPsk(psk string) (wgtypes.Key, error) {
+	// Convert spec PSK string to right length byte array, using sha256.Size == wgtypes.KeyLen.
+	pskBytes := sha256.Sum256([]byte(psk))
+	return wgtypes.NewKey(pskBytes[:]) // nolint:wrapcheck // Let the caller wrap it
+}
+
 func (w *WGCtrl) addLink() error {
 	var err error
 	switch runtime.GOOS {
 	case "linux":
-		err = w.setWGLink()
+		err = w.setLinuxWGLink()
+	case "darwin":
+		err = w.setDarwinWGLink()
 	default:
 		log.Fatalf("unsupported OS: %s", runtime.GOOS)
 	}
@@ -180,7 +376,15 @@ func (w *WGCtrl) addLink() error {
 	return err
 }
 
-func (w *WGCtrl) setWGLink() error {
+func (w *WGCtrl) setDarwinWGLink() error {
+	err := exec.Command("ip", "link", "set", DefaultDeviceName, "type", "wireguard").Run()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (w *WGCtrl) setLinuxWGLink() error {
 	// delete existing wg device if needed
 	if link, err := netlink.LinkByName(DefaultDeviceName); err == nil {
 		// delete existing device
