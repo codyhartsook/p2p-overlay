@@ -80,7 +80,6 @@ func (b *Broker) RegisterPeer(ctx context.Context, peer *pb.Peer) (*pb.RegisterP
 	b.mutex.Lock()
 	defer b.mutex.Unlock()
 
-	log.Info("Registering peer...")
 	var err error
 	address, registered := b.peers[peer.PublicKey]
 	if !registered {
@@ -115,8 +114,6 @@ func (b *Broker) RegisterPeer(ctx context.Context, peer *pb.Peer) (*pb.RegisterP
 }
 
 func (b *Broker) UnregisterPeer(ctx context.Context, peer *pb.UnregisterPeerRequest) (*pb.UnregisterPeerResponse, error) {
-	log.Printf("Unregistering peer: %v", peer)
-
 	b.mutex.Lock()
 	defer b.mutex.Unlock()
 
@@ -126,6 +123,8 @@ func (b *Broker) UnregisterPeer(ctx context.Context, peer *pb.UnregisterPeerRequ
 		log.Printf("error removing peer from local config: %v", err)
 		return &pb.UnregisterPeerResponse{Success: false}, err
 	}
+
+	delete(b.peers, peer.PublicKey)
 
 	// publish to nats
 	ctx = context.TODO()

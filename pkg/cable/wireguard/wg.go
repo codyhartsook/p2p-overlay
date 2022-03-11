@@ -67,8 +67,6 @@ func NewWGCtrl() (*WGCtrl, error) {
 		return nil, errors.Wrap(err, "failed to open wgctl client")
 	}
 
-	log.Info("WireGuard client created")
-
 	var priv, pub, psk wgtypes.Key
 	if psk, err = genPsk(w.spec.PSK); err != nil {
 		return nil, errors.Wrap(err, "error generating pre-shared key")
@@ -100,13 +98,12 @@ func NewWGCtrl() (*WGCtrl, error) {
 		return nil, errors.Wrap(err, "failed to configure WireGuard device")
 	}
 
-	log.Infof("Created local wg device %s with publicKey %s", DefaultDeviceName, pub)
+	log.Infof("Created local wg device %s", DefaultDeviceName)
 
 	return &w, nil
 }
 
 func (w *WGCtrl) Init() error {
-	log.Infof("Initializing wg device")
 
 	_, err := net.InterfaceByName(DefaultDeviceName)
 	if err != nil {
@@ -173,18 +170,32 @@ func (w *WGCtrl) RegisterPeer(ctx context.Context, peer wgtypes.PeerConfig) erro
 	}
 
 	// verify peer was added
-	if p, err := w.peerByKey(&peer.PublicKey); err != nil {
+	if _, err := w.peerByKey(&peer.PublicKey); err != nil {
 		log.Errorf("Failed to verify peer configuration: %v", err)
-	} else {
-		// TODO verify configuration
-		log.Infof("Peer configured, PubKey:%s, EndPoint:%s, AllowedIPs:%v", p.PublicKey, p.Endpoint, p.AllowedIPs)
 	}
 
 	return nil
 }
 
 func (w *WGCtrl) GetPeers(ctx context.Context) ([]wgtypes.PeerConfig, error) {
-	return nil, nil
+	w.mutex.Lock()
+	defer w.mutex.Unlock()
+
+	dev, err := w.client.Device(DefaultDeviceName)
+	if err != nil {
+		return nil, err
+	}
+
+	peerConfigs := make([]wgtypes.PeerConfig, len(dev.Peers))
+	for i, peer := range dev.Peers {
+		peerConfigs[i] = wgtypes.PeerConfig{
+			PublicKey:  peer.PublicKey,
+			Endpoint:   peer.Endpoint,
+			AllowedIPs: peer.AllowedIPs,
+		}
+	}
+
+	return peerConfigs, nil
 }
 
 func (w *WGCtrl) GetLocalConfig() wgtypes.PeerConfig {
@@ -284,7 +295,6 @@ func (w *WGCtrl) PeerConfigToProtobuf(conf wgtypes.PeerConfig) (*pb.Peer, error)
 }
 
 func (w *WGCtrl) ProtobufToPeerConfig(peer *pb.Peer) (wgtypes.PeerConfig, error) {
-	log.Printf("converting protobuf peer to wireguard peer config: %v", peer)
 
 	key, err := wgtypes.ParseKey(peer.PublicKey)
 	if err != nil {
@@ -325,21 +335,17 @@ func (w *WGCtrl) ProtobufToPeerConfig(peer *pb.Peer) (wgtypes.PeerConfig, error)
 
 func parseSubnets(subnets []string) ([]net.IPNet, error) {
 	nets := make([]net.IPNet, 0, len(subnets))
-	var err error
 
 	for _, sn := range subnets {
-		_, cidr, e := net.ParseCIDR(sn)
-		if e != nil {
-			// This should not happen. Log and continue.
-			log.Errorf("failed to parse subnet %s: %v", sn, err)
-			err = e
-			continue
+		_, cidr, err := net.ParseCIDR(sn)
+		if err != nil {
+			return nil, err
 		}
 
 		nets = append(nets, *cidr)
 	}
 
-	return nets, err
+	return nets, nil
 }
 
 func keyFromMap(keys map[string]string) (*wgtypes.Key, error) {
