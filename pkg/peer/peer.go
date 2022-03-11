@@ -64,6 +64,21 @@ func (p *Peer) updateLocalPeers(peers []wgtypes.PeerConfig) {
 	log.Printf("new peers broadcasted.")
 	ctx := context.TODO()
 
+	key := p.cable.GetPubKey()
+
+	member := false
+	for _, peer := range peers {
+		if peer.PublicKey.String() == key {
+			member = true
+			break
+		}
+	}
+
+	if !member {
+		peers = make([]wgtypes.PeerConfig, 0)
+		log.Println("delete self signal received.")
+	}
+
 	p.cable.SyncPeers(ctx, peers)
 }
 
@@ -93,7 +108,7 @@ func (p *Peer) RegisterSelf() {
 	p.cable.AddrAdd()
 }
 
-func (p *Peer) UnRegisterSelf() {
+func (p *Peer) unRegisterSelf() {
 	// send grpc request to broker
 	// remove local interfaces
 }

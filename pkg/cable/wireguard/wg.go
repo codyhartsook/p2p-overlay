@@ -13,7 +13,6 @@ import (
 	"sync"
 	"time"
 
-	"p2p-overlay/pkg/endpoint"
 	pb "p2p-overlay/pkg/grpc"
 
 	"p2p-overlay/pkg/addresses"
@@ -44,10 +43,10 @@ type WGCtrl struct {
 	client  *wgctrl.Client
 	link    netlink.Link
 	mutex   sync.Mutex
-	keys    map[string]string
 	psk     *wgtypes.Key
 	spec    *specification
 	address string
+	pubKey  wgtypes.Key
 }
 
 func NewWGCtrl() (*WGCtrl, error) {
@@ -72,16 +71,13 @@ func NewWGCtrl() (*WGCtrl, error) {
 		return nil, errors.Wrap(err, "error generating pre-shared key")
 	}
 
-	w.psk = &psk
-
 	if priv, err = wgtypes.GeneratePrivateKey(); err != nil {
 		return nil, errors.Wrap(err, "error generating private key")
 	}
 
 	pub = priv.PublicKey()
-	w.keys = make(map[string]string)
-	w.keys[PublicKey] = pub.String()
-
+	w.pubKey = pub
+	w.psk = &psk
 	portInt := int(port)
 
 	// Configure the device - still not up.
@@ -103,6 +99,10 @@ func NewWGCtrl() (*WGCtrl, error) {
 	return &w, nil
 }
 
+func (w *WGCtrl) GetPubKey() string {
+	return w.pubKey.String()
+}
+
 func (w *WGCtrl) Init() error {
 
 	_, err := net.InterfaceByName(DefaultDeviceName)
@@ -115,12 +115,9 @@ func (w *WGCtrl) Init() error {
 		return errors.Wrap(err, "wgctrl cannot find WireGuard device")
 	}
 
-	k, err := keyFromMap(w.keys)
-	if err != nil {
-		return errors.Wrapf(err, "endpoint is missing public key %s", d.PublicKey)
-	}
+	k := w.GetPubKey()
 
-	if k.String() != d.PublicKey.String() {
+	if k != d.PublicKey.String() {
 		return fmt.Errorf("endpoint public key %s is different from device key %s", k, d.PublicKey)
 	}
 
@@ -198,8 +195,23 @@ func (w *WGCtrl) GetPeers(ctx context.Context) ([]wgtypes.PeerConfig, error) {
 	return peerConfigs, nil
 }
 
+func (w *WGCtrl) GetPeerTopology() (net.IP, []net.IP, error) {
+	peers, err := w.GetPeers(context.Background())
+	if err != nil {
+		return nil, nil, err
+	}
+
+	topology := make([]net.IP, len(peers))
+	for i, peer := range peers {
+		firstIP := peer.AllowedIPs[0].IP
+		topology[i] = firstIP
+	}
+
+	return net.IP(w.address), topology, nil
+}
+
 func (w *WGCtrl) GetLocalConfig() wgtypes.PeerConfig {
-	ip := endpoint.GetLocalIP()
+	ip := GetLocalIP()
 
 	allowedIPs := []net.IPNet{addresses.AddressToNet(w.address, 32)}
 
@@ -218,11 +230,11 @@ func (w *WGCtrl) SyncPeers(ctx context.Context, peers []wgtypes.PeerConfig) erro
 	w.mutex.Lock()
 	defer w.mutex.Unlock()
 
-	dev, _ := w.client.Device(DefaultDeviceName)
+	pubKey := w.GetPubKey()
 
 	filteredPeers := make([]wgtypes.PeerConfig, 0)
 	for _, peer := range peers {
-		if dev.PublicKey == peer.PublicKey {
+		if pubKey == peer.PublicKey.String() {
 			continue
 		}
 		filteredPeers = append(filteredPeers, peer)
@@ -414,4 +426,20 @@ func (w *WGCtrl) setLinuxWGLink() error {
 	}
 
 	return nil
+}
+
+func GetLocalIP() net.IP {
+	return GetLocalIPForDestination("8.8.8.8")
+}
+
+func GetLocalIPForDestination(dst string) net.IP {
+	conn, err := net.Dial("udp", dst+":53")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer conn.Close()
+
+	localAddr := conn.LocalAddr().(*net.UDPAddr)
+
+	return localAddr.IP
 }
