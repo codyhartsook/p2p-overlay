@@ -61,7 +61,7 @@ func (p *Peer) connectToBroker() {
 }
 
 func (p *Peer) updateLocalPeers(peers []wgtypes.PeerConfig) {
-	log.Printf("updating peers in local config")
+	log.Printf("new peers broadcasted.")
 	ctx := context.TODO()
 
 	p.cable.SyncPeers(ctx, peers)
@@ -86,6 +86,8 @@ func (p *Peer) RegisterSelf() {
 	if !brokerRes.Success {
 		log.Fatalf("broker rejected peer registration")
 	}
+
+	log.Printf("overlay address provisioned: %s", brokerRes.Address)
 
 	p.cable.SetAddress(brokerRes.Address)
 	p.cable.AddrAdd()
