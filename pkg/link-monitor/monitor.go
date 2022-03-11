@@ -1,6 +1,7 @@
 package link_monitor
 
 import (
+	"fmt"
 	"net"
 	"time"
 
@@ -9,60 +10,66 @@ import (
 )
 
 const (
-	arangoHost = "localhost"
 	probeCount = 3
 	timeout    = time.Duration(10) * time.Second
+
+	arangoPort           = 8529
+	ARANGO_ROOT_USER     = "root"
+	ARANGO_ROOT_PASSWORD = "cil_overly_v1"
+	ARANGO_DATABASE      = "overly_mesh"
+	ARANGO_GRAPH         = "link_performance"
 )
 
-type PerformanceSpec struct {
-	ExecutedAt time.Time `json:"executed_at"`
-	PeerAddr   string    `json:"peer_addr"`
-	LocalAddr  string    `json:"local_addr"`
-	Latency    float32   `json:"latency"`
-	Jitter     float32   `json:"jitter"`
-	Loss       float32   `json:"loss"`
-}
-
-type localPeerTopologyFunc func() (net.IP, []net.IP, error)
+type localPeerTopologyFunc func() ([]net.IP, error)
 
 type Monitor struct {
+	root   string
+	client *ArangoClient
 }
 
-func (m *Monitor) StartMonitor(granularity int, fun localPeerTopologyFunc) {
+func (m *Monitor) StartMonitor(granularity int, brokerHost, rootAddr string, fun localPeerTopologyFunc) {
+	host := fmt.Sprintf("http://%s:%d", brokerHost, arangoPort)
+	conf := ArangoConfig{
+		URL:      host,
+		User:     ARANGO_ROOT_USER,
+		Password: ARANGO_ROOT_PASSWORD,
+		Database: ARANGO_DATABASE,
+	}
+
+	m.client = NewArango(conf)
+	m.client.CreateGraph(ARANGO_GRAPH)
+
+	log.Info("connected to arangodb")
+
+	m.root = rootAddr
 	go func() {
 		for {
-			time.Sleep(time.Duration(granularity) * time.Second)
 			m.peersProbe(fun)
+			time.Sleep(time.Duration(granularity) * time.Second)
 		}
 	}()
 }
 
 func (m *Monitor) peersProbe(fun localPeerTopologyFunc) {
-	root, peers, err := fun()
+	peers, err := fun()
 	if err != nil {
 		log.Errorf("error getting local peers: %v", err)
 		return
 	}
 
 	for _, peer := range peers {
-		go m.probe(root, peer)
+		go m.probe(peer)
 	}
 }
 
-func (m *Monitor) probe(root, peer net.IP) {
+func (m *Monitor) probe(peer net.IP) {
 	pinger, err := ping.NewPinger(peer.String())
 	if err != nil {
 		log.Info("error creating pinger:", err)
 		return
 	}
 
-	pinger.OnFinish = func(stats *ping.Statistics) {
-		log.Printf("\n--- %s ping statistics ---\n", stats.Addr)
-		log.Printf("%d packets transmitted, %d packets received, %d duplicates, %v%% packet loss\n",
-			stats.PacketsSent, stats.PacketsRecv, stats.PacketsRecvDuplicates, stats.PacketLoss)
-		log.Printf("round-trip min/avg/max/stddev = %v/%v/%v/%v\n",
-			stats.MinRtt, stats.AvgRtt, stats.MaxRtt, stats.StdDevRtt)
-	}
+	pinger.OnFinish = m.uploadLinkPerformance
 
 	pinger.Count = probeCount
 	pinger.Timeout = timeout
@@ -71,5 +78,8 @@ func (m *Monitor) probe(root, peer net.IP) {
 	if err != nil {
 		log.Println("failed to ping target host:", err)
 	}
+}
 
+func (m *Monitor) uploadLinkPerformance(stats *ping.Statistics) {
+	m.client.AddEdge(m.root, stats.Addr, stats)
 }

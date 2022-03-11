@@ -23,8 +23,8 @@ func (w *Fake) AddrAdd() {
 
 }
 
-func (w *Fake) GetPeerTopology() (net.IP, []net.IP, error) {
-	return nil, nil, nil
+func (w *Fake) GetPeerTopology() ([]net.IP, error) {
+	return nil, nil
 }
 
 func (w *Fake) GetPubKey() string {

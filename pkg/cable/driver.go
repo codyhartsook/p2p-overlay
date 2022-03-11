@@ -33,7 +33,7 @@ type Cable interface {
 
 	GetPubKey() string
 
-	GetPeerTopology() (net.IP, []net.IP, error)
+	GetPeerTopology() ([]net.IP, error)
 
 	Init() error
 
