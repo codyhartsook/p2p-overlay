@@ -67,8 +67,6 @@ func NewWGCtrl() (*WGCtrl, error) {
 		return nil, errors.Wrap(err, "failed to open wgctl client")
 	}
 
-	log.Info("WireGuard client created")
-
 	var priv, pub, psk wgtypes.Key
 	if psk, err = genPsk(w.spec.PSK); err != nil {
 		return nil, errors.Wrap(err, "error generating pre-shared key")
@@ -106,7 +104,6 @@ func NewWGCtrl() (*WGCtrl, error) {
 }
 
 func (w *WGCtrl) Init() error {
-	log.Infof("Initializing wg device")
 
 	_, err := net.InterfaceByName(DefaultDeviceName)
 	if err != nil {

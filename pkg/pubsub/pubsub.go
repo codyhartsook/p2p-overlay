@@ -38,8 +38,6 @@ func (p *Publisher) BroadcastPeers(peers []wgtypes.PeerConfig) {
 	if err != nil {
 		log.Fatalf("error publishing to channel %s: %v", PeerNodes, err)
 	}
-
-	log.Info("published to channel ", PeerNodes)
 }
 
 type Subscriber struct {
@@ -64,8 +62,6 @@ func (s *Subscriber) RegisterNatsSubscriber(natsHost string) {
 
 func (s *Subscriber) SubscribeToChannels(handler func([]wgtypes.PeerConfig)) {
 	// Nats Async Ephemeral Consumer
-
-	log.Printf("subscribing to channel %s", PeerNodes)
 	_, err := s.subConn.Subscribe(PeerNodes, func(m []wgtypes.PeerConfig) {
 		handler(m)
 	})
