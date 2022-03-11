@@ -2,6 +2,7 @@ package link_monitor
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	driver "github.com/arangodb/go-driver"
@@ -96,13 +97,20 @@ func (a *ArangoClient) CreateGraph(name string) {
 	}
 
 	a.graph = g
-	vertices, _ := a.graph.CreateVertexCollection(nil, "nodes")
+	vertices, err := a.graph.CreateVertexCollection(nil, "nodes")
+	if err != nil {
+		log.Fatalf("Failed to create vertex collection: %v", err)
+	}
+
 	constraints := driver.VertexConstraints{
 		From: []string{"nodes"},
 		To:   []string{"nodes"},
 	}
 	a.vertices = vertices
-	edges, _ := a.graph.CreateEdgeCollection(nil, "edges", constraints)
+	edges, err := a.graph.CreateEdgeCollection(nil, "edges", constraints)
+	if err != nil {
+		log.Fatalf("Failed to create edge collection: %v", err)
+	}
 	a.edges = edges
 }
 
@@ -111,10 +119,13 @@ func (a *ArangoClient) AddEdge(src, dst string, stats *ping.Statistics) {
 	edge := map[string]interface{}{
 		"_from":  src,
 		"_to":    dst,
-		"rtt":    stats.AvgRtt,
-		"jitter": stats.StdDevRtt,
-		"loss":   stats.PacketLoss,
+		"rtt":    stats.AvgRtt.String(),
+		"jitter": stats.StdDevRtt.String(),
+		"loss":   fmt.Sprintf("%f", stats.PacketLoss),
 	}
+
+	log.Info(a.vertices)
+	log.Info(a.edges)
 
 	a.vertices.CreateDocument(nil, src)
 	a.vertices.CreateDocument(nil, dst)

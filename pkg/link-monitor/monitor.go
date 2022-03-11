@@ -39,8 +39,6 @@ func (m *Monitor) StartMonitor(granularity int, brokerHost, rootAddr string, fun
 	m.client = NewArango(conf)
 	m.client.CreateGraph(ARANGO_GRAPH)
 
-	log.Info("connected to arangodb")
-
 	m.root = rootAddr
 	go func() {
 		for {
