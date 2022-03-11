@@ -143,9 +143,20 @@ func (w *WGCtrl) SetAddress(addr string) {
 }
 
 func (w *WGCtrl) AddrAdd() {
-	ipNet := addresses.AddressToNet(w.address, 24)
-	addr := netlink.Addr{IPNet: &ipNet}
-	netlink.AddrAdd(w.link, &addr)
+	/*
+		ipNet := addresses.AddressToNet(w.address, 24)
+		addr := &netlink.Addr{IPNet: &ipNet}
+		err := netlink.AddrAdd(w.link, addr)
+		if err != nil {
+			log.Fatalf("Failed to add IP address to interface: %v", err)
+		}*/
+
+	net := fmt.Sprintf("%s/24", w.address)
+
+	err := exec.Command("ip", "addr", "add", net, "dev", DefaultDeviceName).Run()
+	if err != nil {
+		log.Fatalf("Failed to add IP route to interface: %v", err)
+	}
 }
 
 func (w *WGCtrl) RegisterPeer(ctx context.Context, peer wgtypes.PeerConfig) error {
