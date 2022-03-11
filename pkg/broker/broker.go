@@ -4,6 +4,7 @@ import (
 	"context"
 	"net"
 	"p2p-overlay/pkg/cable"
+	link_monitor "p2p-overlay/pkg/link-monitor"
 	"p2p-overlay/pkg/pubsub"
 	"sync"
 
@@ -16,13 +17,15 @@ import (
 )
 
 const (
-	grpcAddr = "0.0.0.0:4224"
+	grpcAddr   = "0.0.0.0:4224"
+	arangoHost = "127.0.0.1"
 )
 
 type Broker struct {
 	cable cable.Cable
 	pubsub.Publisher
 	addresses.AddressDistribution
+	link_monitor.Monitor
 	pb.UnimplementedPeersServer
 	mutex    *sync.RWMutex
 	natsHost string
@@ -46,7 +49,12 @@ func NewBroker(peerCableType string, brokerHost string) *Broker {
 		log.Fatalf("error initializing wireguard device: %v", err)
 	}
 
+	// add address to wireguard tunnel
 	b.cable.AddrAdd()
+
+	// monitor tunnel performance
+	b.InitializeMonitoring(arangoHost, brokerAddr, "broker")
+	b.StartMonitor(10, b.cable.GetPeerTopology)
 
 	return b
 }

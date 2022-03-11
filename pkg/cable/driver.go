@@ -31,14 +31,13 @@ type Cable interface {
 
 	DeletePeer(ctx context.Context, publicKey string) error
 
+	GetPubKey() string
+
+	GetPeerTopology() ([]net.IP, error)
+
 	Init() error
 
 	AddrAdd()
-}
-
-type LocalInfo interface {
-	GetLocalIp() net.IP
-	GetLocalPort() int
 }
 
 const (

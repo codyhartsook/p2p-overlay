@@ -5,3 +5,6 @@ make proto:
 
 make nats:
     docker run -p 4222:4222 -i nats
+
+make arango:
+    docker run -d -p 8529:8529 -e ARANGO_ROOT_PASSWORD=cil_overly_v1 arangodb/arangodb:3.9.0

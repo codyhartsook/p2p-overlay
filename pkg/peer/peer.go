@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"p2p-overlay/pkg/cable"
+	link_monitor "p2p-overlay/pkg/link-monitor"
 	"p2p-overlay/pkg/pubsub"
 	"time"
 
@@ -16,13 +17,15 @@ import (
 )
 
 const (
-	grpcPort = 4224
+	grpcPort           = 4224
+	monitoringInterval = 10
 )
 
 type Peer struct {
 	cable      cable.Cable
 	grpcClient pb.PeersClient
 	pubsub.Subscriber
+	link_monitor.Monitor
 	natsHost string
 	grpcAddr string
 }
@@ -64,6 +67,21 @@ func (p *Peer) updateLocalPeers(peers []wgtypes.PeerConfig) {
 	log.Printf("new peers broadcasted.")
 	ctx := context.TODO()
 
+	key := p.cable.GetPubKey()
+
+	member := false
+	for _, peer := range peers {
+		if peer.PublicKey.String() == key {
+			member = true
+			break
+		}
+	}
+
+	if !member {
+		peers = make([]wgtypes.PeerConfig, 0)
+		log.Println("delete self signal received.")
+	}
+
 	p.cable.SyncPeers(ctx, peers)
 }
 
@@ -91,9 +109,13 @@ func (p *Peer) RegisterSelf() {
 
 	p.cable.SetAddress(brokerRes.Address)
 	p.cable.AddrAdd()
+
+	// monitor tunnel performance
+	p.InitializeMonitoring(p.natsHost, brokerRes.Address, "peer")
+	p.StartMonitor(monitoringInterval, p.cable.GetPeerTopology)
 }
 
-func (p *Peer) UnRegisterSelf() {
+func (p *Peer) unRegisterSelf() {
 	// send grpc request to broker
 	// remove local interfaces
 }

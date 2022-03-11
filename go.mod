@@ -3,6 +3,8 @@ module p2p-overlay
 go 1.16
 
 require (
+	github.com/arangodb/go-driver v1.2.1
+	github.com/go-ping/ping v0.0.0-20211130115550-779d1e919534
 	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/nats-io/nats-server/v2 v2.7.3 // indirect
 	github.com/nats-io/nats.go v1.13.1-0.20220121202836-972a071d373d
