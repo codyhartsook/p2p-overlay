@@ -127,6 +127,8 @@ func (b *Broker) UnregisterPeer(ctx context.Context, peer *pb.UnregisterPeerRequ
 		return &pb.UnregisterPeerResponse{Success: false}, err
 	}
 
+	delete(b.peers, peer.PublicKey)
+
 	// publish to nats
 	ctx = context.TODO()
 	peers, err := b.cable.GetPeers(ctx)
