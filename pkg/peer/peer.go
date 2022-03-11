@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"p2p-overlay/pkg/cable"
+	link_monitor "p2p-overlay/pkg/link-monitor"
 	"p2p-overlay/pkg/pubsub"
 	"time"
 
@@ -16,13 +17,15 @@ import (
 )
 
 const (
-	grpcPort = 4224
+	grpcPort           = 4224
+	monitoringInterval = 10
 )
 
 type Peer struct {
 	cable      cable.Cable
 	grpcClient pb.PeersClient
 	pubsub.Subscriber
+	link_monitor.Monitor
 	natsHost string
 	grpcAddr string
 }
@@ -106,6 +109,10 @@ func (p *Peer) RegisterSelf() {
 
 	p.cable.SetAddress(brokerRes.Address)
 	p.cable.AddrAdd()
+
+	// monitor tunnel performance
+	p.InitializeMonitoring(p.natsHost, brokerRes.Address, "peer")
+	p.StartMonitor(monitoringInterval, p.cable.GetPeerTopology)
 }
 
 func (p *Peer) unRegisterSelf() {

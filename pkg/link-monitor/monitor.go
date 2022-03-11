@@ -27,7 +27,7 @@ type Monitor struct {
 	client *ArangoClient
 }
 
-func (m *Monitor) StartMonitor(granularity int, brokerHost, rootAddr string, fun localPeerTopologyFunc) {
+func (m *Monitor) InitializeMonitoring(brokerHost, rootAddr, role string) {
 	host := fmt.Sprintf("http://%s:%d", brokerHost, arangoPort)
 	conf := ArangoConfig{
 		URL:      host,
@@ -36,10 +36,16 @@ func (m *Monitor) StartMonitor(granularity int, brokerHost, rootAddr string, fun
 		Database: ARANGO_DATABASE,
 	}
 
-	m.client = NewArango(conf)
-	m.client.CreateGraph(ARANGO_GRAPH)
-
 	m.root = rootAddr
+	m.client = NewArango(conf)
+
+	if role == "broker" {
+		m.client.CreateGraph(ARANGO_GRAPH)
+	}
+	m.client.LoadGraph(ARANGO_GRAPH)
+}
+
+func (m *Monitor) StartMonitor(granularity int, fun localPeerTopologyFunc) {
 	go func() {
 		for {
 			m.peersProbe(fun)

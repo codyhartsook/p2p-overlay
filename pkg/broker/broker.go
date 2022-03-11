@@ -17,7 +17,8 @@ import (
 )
 
 const (
-	grpcAddr = "0.0.0.0:4224"
+	grpcAddr   = "0.0.0.0:4224"
+	arangoHost = "127.0.0.1"
 )
 
 type Broker struct {
@@ -52,7 +53,8 @@ func NewBroker(peerCableType string, brokerHost string) *Broker {
 	b.cable.AddrAdd()
 
 	// monitor tunnel performance
-	b.StartMonitor(30, "127.0.0.1", brokerAddr, b.cable.GetPeerTopology)
+	b.InitializeMonitoring(arangoHost, brokerAddr, "broker")
+	b.StartMonitor(10, b.cable.GetPeerTopology)
 
 	return b
 }
