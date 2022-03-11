@@ -50,8 +50,8 @@ type WGCtrl struct {
 	address string
 }
 
-func NewWGCtrl(address string) (*WGCtrl, error) {
-	w := WGCtrl{spec: new(specification), address: address}
+func NewWGCtrl() (*WGCtrl, error) {
+	w := WGCtrl{spec: new(specification)}
 
 	if err := w.addLink(); err != nil {
 		return nil, errors.Wrap(err, "failed to setup WireGuard link")
@@ -138,6 +138,16 @@ func (w *WGCtrl) Init() error {
 	return nil
 }
 
+func (w *WGCtrl) SetAddress(addr string) {
+	w.address = addr
+}
+
+func (w *WGCtrl) AddrAdd() {
+	ipNet := addresses.AddressToNet(w.address, 24)
+	addr := netlink.Addr{IPNet: &ipNet}
+	netlink.AddrAdd(w.link, &addr)
+}
+
 func (w *WGCtrl) RegisterPeer(ctx context.Context, peer wgtypes.PeerConfig) error {
 	w.mutex.Lock()
 	defer w.mutex.Unlock()
@@ -169,7 +179,7 @@ func (w *WGCtrl) GetPeers(ctx context.Context) ([]wgtypes.PeerConfig, error) {
 func (w *WGCtrl) GetLocalConfig() wgtypes.PeerConfig {
 	ip := endpoint.GetLocalIP()
 
-	allowedIPs := []net.IPNet{addresses.AddressToNet(w.address)}
+	allowedIPs := []net.IPNet{addresses.AddressToNet(w.address, 32)}
 
 	dev, _ := w.client.Device(DefaultDeviceName)
 	conf := wgtypes.PeerConfig{
@@ -178,8 +188,6 @@ func (w *WGCtrl) GetLocalConfig() wgtypes.PeerConfig {
 		PresharedKey: w.psk,
 		AllowedIPs:   allowedIPs,
 	}
-
-	log.Info("Local peer config: ", conf)
 
 	return conf
 }
@@ -283,7 +291,7 @@ func (w *WGCtrl) ProtobufToPeerConfig(peer *pb.Peer) (wgtypes.PeerConfig, error)
 
 	allowedIPs, err := parseSubnets(peer.AllowedIps)
 	if err != nil {
-		allowedIPs = []net.IPNet{addresses.AddressToNet(peer.Address)}
+		allowedIPs = []net.IPNet{addresses.AddressToNet(peer.Address, 32)}
 	}
 
 	ka := KeepAliveInterval

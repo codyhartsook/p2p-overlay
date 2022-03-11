@@ -35,19 +35,18 @@ func NewBroker(peerCableType string, brokerHost string) *Broker {
 	b.InitializeAddresses()
 	brokerAddr := b.GetBrokerAddress().String()
 
-	log.Info("broker address: ", brokerAddr)
-	first, _ := b.GetAvailableAddress()
-	log.Info("first address: ", first.String())
-
 	b.peers = make(map[string]net.IP)
 
 	// start tunnel cable
-	b.cable = cable.NewCable(peerCableType, brokerAddr)
+	b.cable = cable.NewCable(peerCableType)
+	b.cable.SetAddress(brokerAddr)
 
 	err := b.cable.Init()
 	if err != nil {
 		log.Fatalf("error initializing wireguard device: %v", err)
 	}
+
+	b.cable.AddrAdd()
 
 	return b
 }
@@ -149,8 +148,6 @@ func (b *Broker) addPeerToLocalConfig(peer *pb.Peer) error {
 		log.Printf("error converting protobuf peer to config: %v", err)
 		return err
 	}
-
-	log.Info("allowed-ips ", conf.AllowedIPs)
 
 	return b.cable.RegisterPeer(ctx, conf)
 }

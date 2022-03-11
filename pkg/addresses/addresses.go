@@ -10,7 +10,6 @@ import (
 const (
 	baseAddr = "10.0.0.1"
 	maxAddr  = "10.0.0.254"
-	mask     = 32
 )
 
 type AddressDistribution struct {
@@ -65,7 +64,7 @@ func (a *AddressDistribution) incrementPeerAddress(currIP string) string {
 	return ip.String()
 }
 
-func AddressToNet(addr string) net.IPNet {
+func AddressToNet(addr string, mask int) net.IPNet {
 	ip := net.ParseIP(addr)
 	return net.IPNet{
 		IP:   ip,

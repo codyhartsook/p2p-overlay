@@ -19,6 +19,8 @@ type Cable interface {
 
 	RegisterPeer(ctx context.Context, peer wgtypes.PeerConfig) error
 
+	SetAddress(addr string)
+
 	GetPeers(ctx context.Context) ([]wgtypes.PeerConfig, error)
 
 	SyncPeers(ctx context.Context, peers []wgtypes.PeerConfig) error
@@ -30,6 +32,8 @@ type Cable interface {
 	DeletePeer(ctx context.Context, publicKey string) error
 
 	Init() error
+
+	AddrAdd()
 }
 
 type LocalInfo interface {
@@ -42,16 +46,16 @@ const (
 	fake = "fake"
 )
 
-func NewCable(cableType, addr string) Cable {
+func NewCable(cableType string) Cable {
 	switch cableType {
 	case wg:
-		w, err := W.NewWGCtrl(addr)
+		w, err := W.NewWGCtrl()
 		if err != nil {
 			log.Fatalf("error creating wireguard cable: %v", err)
 		}
 		return w
 	case fake:
-		f, _ := F.NewFake(addr)
+		f, _ := F.NewFake()
 		return f
 	default:
 		log.Fatalf("driver type not matched: %s", cableType)

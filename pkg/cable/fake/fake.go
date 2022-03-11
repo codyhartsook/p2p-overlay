@@ -10,7 +10,7 @@ import (
 
 type Fake struct{}
 
-func NewFake(addr string) (*Fake, error) {
+func NewFake() (*Fake, error) {
 	return &Fake{}, nil
 }
 
@@ -18,8 +18,15 @@ func (w *Fake) Init() error {
 	return nil
 }
 
+func (w *Fake) AddrAdd() {
+
+}
+
 func (w *Fake) RegisterPeer(ctx context.Context, peer wgtypes.PeerConfig) error {
 	return nil
+}
+
+func (w *Fake) SetAddress(addr string) {
 }
 
 func (w *Fake) GetLocalConfig() wgtypes.PeerConfig {
