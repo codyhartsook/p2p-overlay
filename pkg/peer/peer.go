@@ -26,12 +26,14 @@ type Peer struct {
 	grpcClient pb.PeersClient
 	pubsub.Subscriber
 	link_monitor.Monitor
-	natsHost string
-	grpcAddr string
+	natsHost  string
+	grpcAddr  string
+	zone      string
+	nodeZones map[string]string
 }
 
-func NewPeer(peerCableType, brokerHost string) *Peer {
-	p := &Peer{}
+func NewPeer(peerCableType, brokerHost string, hostZone string) *Peer {
+	p := &Peer{zone: hostZone}
 
 	p.natsHost = brokerHost
 	p.grpcAddr = fmt.Sprintf("%s:%d", brokerHost, grpcPort)
@@ -63,26 +65,33 @@ func (p *Peer) connectToBroker() {
 	log.Print("connected to broker over grpc")
 }
 
-func (p *Peer) updateLocalPeers(peers []wgtypes.PeerConfig) {
+func (p *Peer) updateLocalPeers(peers []pubsub.PubPeer) {
 	log.Printf("new peers broadcasted.")
 	ctx := context.TODO()
 
 	key := p.cable.GetPubKey()
+	peerConfs := make([]wgtypes.PeerConfig, len(peers))
 
 	member := false
-	for _, peer := range peers {
-		if peer.PublicKey.String() == key {
+	for i, peer := range peers {
+		p.nodeZones[peer.Peer.AllowedIPs[0].IP.String()] = peer.Zone
+		peerConfs[i] = peer.Peer
+		if peer.Peer.PublicKey.String() == key {
 			member = true
 			break
 		}
 	}
 
 	if !member {
-		peers = make([]wgtypes.PeerConfig, 0)
+		peerConfs = make([]wgtypes.PeerConfig, 0)
 		log.Println("delete self signal received.")
 	}
 
-	p.cable.SyncPeers(ctx, peers)
+	p.cable.SyncPeers(ctx, peerConfs)
+}
+
+func (p *Peer) getNodeZone(ip string) string {
+	return p.nodeZones[ip]
 }
 
 func (p *Peer) RegisterSelf() {
@@ -96,6 +105,7 @@ func (p *Peer) RegisterSelf() {
 		log.Printf("error converting peer config to protobuf: %v", err)
 	}
 
+	req.Zone = p.zone
 	brokerRes, err := p.grpcClient.RegisterPeer(ctx, req)
 	if err != nil {
 		log.Fatalf("could not register: %v", err)
@@ -112,7 +122,7 @@ func (p *Peer) RegisterSelf() {
 
 	// monitor tunnel performance
 	p.InitializeMonitoring(p.natsHost, brokerRes.Address, "peer")
-	p.StartMonitor(monitoringInterval, p.cable.GetPeerTopology)
+	p.StartMonitor(monitoringInterval, p.cable.GetPeerTopology, p.getNodeZone)
 }
 
 func (p *Peer) unRegisterSelf() {

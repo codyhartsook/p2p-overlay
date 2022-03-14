@@ -360,20 +360,6 @@ func parseSubnets(subnets []string) ([]net.IPNet, error) {
 	return nets, nil
 }
 
-func keyFromMap(keys map[string]string) (*wgtypes.Key, error) {
-	s, found := keys[PublicKey]
-	if !found {
-		return nil, fmt.Errorf("missing public key")
-	}
-
-	key, err := wgtypes.ParseKey(s)
-	if err != nil {
-		return nil, errors.Wrapf(err, "failed to parse public key %s", s)
-	}
-
-	return &key, nil
-}
-
 func genPsk(psk string) (wgtypes.Key, error) {
 	// Convert spec PSK string to right length byte array, using sha256.Size == wgtypes.KeyLen.
 	pskBytes := sha256.Sum256([]byte(psk))

@@ -157,18 +157,18 @@ func (a *ArangoClient) LoadGraph(gName string) {
 func (a *ArangoClient) AddEdge(src, dst string, stats *ping.Statistics) {
 	srcV := VertexNode{Key: src}
 	if exists, _ := a.vertices.DocumentExists(context.TODO(), src); !exists {
-		_, err := a.vertices.CreateDocument(context.TODO(), srcV)
-		if err != nil {
+		_, _ = a.vertices.CreateDocument(context.TODO(), srcV)
+		/*if err != nil {
 			log.Fatalf("Failed to create document: %s : %v", src, err)
-		}
+		}*/
 	}
 
 	dstV := VertexNode{Key: dst}
 	if exists, _ := a.vertices.DocumentExists(context.TODO(), dst); !exists {
-		_, err := a.vertices.CreateDocument(context.TODO(), dstV)
-		if err != nil {
-			log.Fatalf("Failed to create document: %s : %v", dst, err)
-		}
+		_, _ = a.vertices.CreateDocument(context.TODO(), dstV)
+		//if err != nil {
+		//	log.Fatalf("Failed to create document: %s : %v", dst, err)
+		//}
 	}
 
 	srcNode := fmt.Sprintf("nodes/%s", src)

@@ -38,4 +38,5 @@ message Peer {
     int64 transmit_bytes = 9;
     int64 last_handshake_time_unix_sec = 10;
     string address = 11;
+    string zone = 12;
 }

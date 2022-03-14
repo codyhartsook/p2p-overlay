@@ -21,6 +21,7 @@ const (
 )
 
 type localPeerTopologyFunc func() ([]net.IP, error)
+type peerZoneFunc func(string) string
 
 type Monitor struct {
 	root   string
@@ -45,35 +46,33 @@ func (m *Monitor) InitializeMonitoring(brokerHost, rootAddr, role string) {
 	m.client.LoadGraph(ARANGO_GRAPH)
 }
 
-func (m *Monitor) StartMonitor(granularity int, fun localPeerTopologyFunc) {
+func (m *Monitor) StartMonitor(granularity int, topoFunc localPeerTopologyFunc, zoneFunc peerZoneFunc) {
 	go func() {
 		for {
-			m.peersProbe(fun)
+			m.peersProbe(topoFunc, zoneFunc)
 			time.Sleep(time.Duration(granularity) * time.Second)
 		}
 	}()
 }
 
-func (m *Monitor) peersProbe(fun localPeerTopologyFunc) {
-	peers, err := fun()
+func (m *Monitor) peersProbe(topoFunc localPeerTopologyFunc, zoneFunc peerZoneFunc) {
+	peers, err := topoFunc()
 	if err != nil {
 		log.Errorf("error getting local peers: %v", err)
 		return
 	}
 
 	for _, peer := range peers {
-		go m.probe(peer)
+		go m.probe(peer, zoneFunc)
 	}
 }
 
-func (m *Monitor) probe(peer net.IP) {
+func (m *Monitor) probe(peer net.IP, zoneFunc peerZoneFunc) {
 	pinger, err := ping.NewPinger(peer.String())
 	if err != nil {
 		log.Info("error creating pinger:", err)
 		return
 	}
-
-	pinger.OnFinish = m.uploadLinkPerformance
 
 	pinger.Count = probeCount
 	pinger.Timeout = timeout
@@ -82,8 +81,10 @@ func (m *Monitor) probe(peer net.IP) {
 	if err != nil {
 		log.Println("failed to ping target host:", err)
 	}
-}
 
-func (m *Monitor) uploadLinkPerformance(stats *ping.Statistics) {
-	m.client.AddEdge(m.root, stats.Addr, stats)
+	stats := pinger.Statistics()
+
+	src := fmt.Sprintf("%s-%s", m.root, zoneFunc(peer.String()))
+	dst := fmt.Sprintf("%s-%s", peer.String(), zoneFunc(peer.String()))
+	m.client.AddEdge(src, dst, stats)
 }
