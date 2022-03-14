@@ -2,7 +2,6 @@ package cable
 
 import (
 	"context"
-	"net"
 
 	pb "p2p-overlay/pkg/grpc"
 
@@ -32,8 +31,6 @@ type Cable interface {
 	DeletePeer(ctx context.Context, publicKey string) error
 
 	GetPubKey() string
-
-	GetPeerTopology() ([]net.IP, error)
 
 	Init() error
 

@@ -195,21 +195,6 @@ func (w *WGCtrl) GetPeers(ctx context.Context) ([]wgtypes.PeerConfig, error) {
 	return peerConfigs, nil
 }
 
-func (w *WGCtrl) GetPeerTopology() ([]net.IP, error) {
-	peers, err := w.GetPeers(context.Background())
-	if err != nil {
-		return nil, err
-	}
-
-	topology := make([]net.IP, len(peers))
-	for i, peer := range peers {
-		firstIP := peer.AllowedIPs[0].IP
-		topology[i] = firstIP
-	}
-
-	return topology, nil
-}
-
 func (w *WGCtrl) GetLocalConfig() wgtypes.PeerConfig {
 	ip := GetLocalIP()
 

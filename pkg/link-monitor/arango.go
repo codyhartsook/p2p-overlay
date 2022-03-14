@@ -174,7 +174,7 @@ func (a *ArangoClient) AddEdge(src, dst string, stats *ping.Statistics) {
 	srcNode := fmt.Sprintf("nodes/%s", src)
 	dstNode := fmt.Sprintf("nodes/%s", dst)
 	edge := EdgeLink{
-		Key:    src + "->" + dst,
+		Key:    src + "-" + dst,
 		From:   srcNode,
 		To:     dstNode,
 		Rtt:    stats.AvgRtt.Milliseconds(),

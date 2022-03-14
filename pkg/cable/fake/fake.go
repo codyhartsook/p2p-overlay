@@ -2,7 +2,6 @@ package fake
 
 import (
 	"context"
-	"net"
 
 	pb "p2p-overlay/pkg/grpc"
 
@@ -21,10 +20,6 @@ func (w *Fake) Init() error {
 
 func (w *Fake) AddrAdd() {
 
-}
-
-func (w *Fake) GetPeerTopology() ([]net.IP, error) {
-	return nil, nil
 }
 
 func (w *Fake) GetPubKey() string {
