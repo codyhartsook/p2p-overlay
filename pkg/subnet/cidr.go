@@ -1,6 +1,7 @@
 package subnet
 
 import (
+	"bytes"
 	"fmt"
 	"net"
 	"sort"
@@ -14,21 +15,25 @@ const (
 )
 
 type AddressDistribution struct {
-	availableAddresses []string
+	availableAddresses []net.IP
 }
 
 func (a *AddressDistribution) InitializeAddresses() {
-	a.availableAddresses = make([]string, 0)
+	ips := make([]string, 0)
 	currAddr := baseAddr
 	lastAddr := maxAddr
-
 	for {
-		currAddr = a.incrementPeerAddress(currAddr)
+		currIP := net.ParseIP(currAddr)
+		currAddr = a.incrementPeerAddress(currIP).String()
 		if currAddr == lastAddr {
 			break
 		}
+		ips = append(ips, currAddr)
+	}
 
-		a.availableAddresses = append(a.availableAddresses, currAddr)
+	a.availableAddresses = make([]net.IP, len(ips))
+	for i, ip := range ips {
+		a.availableAddresses[i] = net.ParseIP(ip)
 	}
 }
 
@@ -41,22 +46,24 @@ func (a *AddressDistribution) GetAvailableAddress() (net.IP, error) {
 		return nil, fmt.Errorf("no available addresses")
 	}
 
-	addr := net.ParseIP(a.availableAddresses[0])
+	addr := a.availableAddresses[0]
 	a.availableAddresses[0] = a.availableAddresses[len(a.availableAddresses)-1]
 	a.availableAddresses = a.availableAddresses[:len(a.availableAddresses)-1]
 
-	sort.Strings(a.availableAddresses)
+	sort.Slice(a.availableAddresses, func(i, j int) bool {
+		return bytes.Compare(a.availableAddresses[i], a.availableAddresses[j]) < 0
+	})
 
 	return addr, nil
 }
 
 func (a *AddressDistribution) ReturnAddress(addr string) {
-	a.availableAddresses = append(a.availableAddresses, addr)
+	ip := net.ParseIP(addr)
+	a.availableAddresses = append(a.availableAddresses, ip)
 }
 
-func (a *AddressDistribution) incrementPeerAddress(currIP string) string {
-	ip := net.ParseIP(currIP)
-	ip = ip.To4()
+func (a *AddressDistribution) incrementPeerAddress(currIP net.IP) net.IP {
+	ip := currIP.To4()
 
 	if ip == nil {
 		log.Fatalf("error parsing ip: %v", ip)
@@ -64,7 +71,7 @@ func (a *AddressDistribution) incrementPeerAddress(currIP string) string {
 
 	ip[3]++
 
-	return ip.String()
+	return ip
 }
 
 func AddressToNet(addr string, mask int) net.IPNet {
