@@ -118,7 +118,6 @@ func (p *Peer) updateLocalPeers(peers []pubsub.PubPeer) {
 		peerConfs[i] = peer.Peer
 		if peer.Peer.PublicKey.String() == key {
 			member = true
-			break
 		}
 	}
 

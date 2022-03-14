@@ -164,7 +164,7 @@ func (b *Broker) UnregisterPeer(ctx context.Context, peer *pb.UnregisterPeerRequ
 }
 
 func (b *Broker) addPeerToLocalConfig(peer *pb.Peer) error {
-	log.Printf("adding peer %s to local config", peer.Endpoint)
+	log.Printf("adding peer %s to local config", peer.Address)
 
 	ctx := context.TODO()
 	conf, err := b.cable.ProtobufToPeerConfig(peer)

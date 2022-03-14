@@ -18,13 +18,13 @@ type Publisher struct {
 }
 
 type NodeSpec struct {
-	Address string
-	Zone    string
+	Address string `json:"address"`
+	Zone    string `json:"zone"`
 }
 
 type PubPeer struct {
-	Peer     wgtypes.PeerConfig
-	Metadata NodeSpec
+	Peer     wgtypes.PeerConfig `json:"peer"`
+	Metadata NodeSpec           `json:"metadata"`
 }
 
 func (p *Publisher) RegisterPublisher(natsHost string) {

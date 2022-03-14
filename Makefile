@@ -4,7 +4,7 @@ proto:
     pkg/grpc/registry.proto
 
 nats:
-    docker run -p 4222:4222 -i nats
+    docker run -d -p 4222:4222 -i nats
 
 arango:
     docker run -d -p 8529:8529 -e ARANGO_ROOT_PASSWORD=cil_overly_v1 arangodb/arangodb:3.9.0
