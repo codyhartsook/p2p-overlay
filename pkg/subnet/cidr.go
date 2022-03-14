@@ -1,8 +1,9 @@
-package addresses
+package subnet
 
 import (
 	"fmt"
 	"net"
+	"sort"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -43,6 +44,8 @@ func (a *AddressDistribution) GetAvailableAddress() (net.IP, error) {
 	addr := net.ParseIP(a.availableAddresses[0])
 	a.availableAddresses[0] = a.availableAddresses[len(a.availableAddresses)-1]
 	a.availableAddresses = a.availableAddresses[:len(a.availableAddresses)-1]
+
+	sort.Strings(a.availableAddresses)
 
 	return addr, nil
 }

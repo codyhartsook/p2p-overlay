@@ -10,8 +10,8 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
-	"p2p-overlay/pkg/addresses"
 	pb "p2p-overlay/pkg/grpc"
+	addresses "p2p-overlay/pkg/subnet"
 
 	"google.golang.org/grpc"
 )
@@ -40,7 +40,7 @@ func NewBroker(peerCableType string, brokerHost string) *Broker {
 
 	b.peers = make(map[string]net.IP)
 
-	// start tunnel cable
+	// start wg tunnel agent
 	b.cable = cable.NewCable(peerCableType)
 	b.cable.SetAddress(brokerAddr)
 
@@ -83,7 +83,7 @@ func (b *Broker) registerGrpc() {
 	log.Println("grpc server started")
 }
 
-// Implement the gRPC inerface
+// Implements the gRPC inerface
 func (b *Broker) RegisterPeer(ctx context.Context, peer *pb.Peer) (*pb.RegisterPeerResponse, error) {
 	b.mutex.Lock()
 	defer b.mutex.Unlock()
@@ -114,6 +114,7 @@ func (b *Broker) RegisterPeer(ctx context.Context, peer *pb.Peer) (*pb.RegisterP
 		return &pb.RegisterPeerResponse{Success: false}, err
 	}
 
+	// include broker config in broadcasted peers list
 	myConf := b.cable.GetLocalConfig()
 	peers = append(peers, myConf)
 
@@ -134,7 +135,7 @@ func (b *Broker) UnregisterPeer(ctx context.Context, peer *pb.UnregisterPeerRequ
 
 	delete(b.peers, peer.PublicKey)
 
-	// publish to nats
+	// broadcast updated peers list, peers will sync with new config thus removing this peer
 	ctx = context.TODO()
 	peers, err := b.cable.GetPeers(ctx)
 	if err != nil {

@@ -189,3 +189,12 @@ func (a *ArangoClient) AddEdge(src, dst string, stats *ping.Statistics) {
 		}
 	}
 }
+
+func (a *ArangoClient) DeleteNode(key string) {
+	if exists, _ := a.vertices.DocumentExists(context.TODO(), key); exists {
+		_, err := a.vertices.RemoveDocument(context.TODO(), key)
+		if err != nil {
+			log.Fatalf("Failed to delete document: %v", err)
+		}
+	}
+}
