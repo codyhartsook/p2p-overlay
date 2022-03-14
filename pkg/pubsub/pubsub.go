@@ -17,9 +17,14 @@ type Publisher struct {
 	conn *nats.EncodedConn
 }
 
+type NodeSpec struct {
+	Address string
+	Zone    string
+}
+
 type PubPeer struct {
-	Peer wgtypes.PeerConfig
-	Zone string
+	Peer     wgtypes.PeerConfig
+	Metadata NodeSpec
 }
 
 func (p *Publisher) RegisterPublisher(natsHost string) {

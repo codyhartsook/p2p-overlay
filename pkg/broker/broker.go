@@ -28,10 +28,10 @@ type Broker struct {
 	addresses.AddressDistribution
 	link_monitor.Monitor
 	pb.UnimplementedPeersServer
-	mutex     *sync.RWMutex
-	natsHost  string
-	nodeZones map[string]string
-	zone      string
+	mutex    *sync.RWMutex
+	natsHost string
+	nodes    map[string]pubsub.NodeSpec
+	zone     string
 }
 
 func NewBroker(peerCableType string, brokerHost string, hostZone string) *Broker {
@@ -39,9 +39,6 @@ func NewBroker(peerCableType string, brokerHost string, hostZone string) *Broker
 
 	b.InitializeAddresses()
 	brokerAddr := b.GetBrokerAddress().String()
-
-	b.nodeZones = make(map[string]string)
-	b.nodeZones[brokerAddr] = hostZone
 
 	// start wg tunnel agent
 	b.cable = cable.NewCable(peerCableType)
@@ -52,18 +49,37 @@ func NewBroker(peerCableType string, brokerHost string, hostZone string) *Broker
 		log.Fatalf("error initializing wireguard device: %v", err)
 	}
 
+	b.nodes = make(map[string]pubsub.NodeSpec)
+	b.nodes[b.cable.GetPubKey()] = pubsub.NodeSpec{Address: brokerAddr, Zone: b.zone}
+
 	// add address to wireguard tunnel
 	b.cable.AddrAdd()
 
 	// monitor tunnel performance
 	b.InitializeMonitoring(arangoHost, brokerAddr, "broker")
-	b.StartMonitor(10, b.cable.GetPeerTopology, b.getNodeZone)
+	b.StartMonitor(10, b.getPeerSubnetAddrs, b.getNodeZone)
 
 	return b
 }
 
 func (b *Broker) getNodeZone(ip string) string {
-	return b.nodeZones[ip]
+	for _, node := range b.nodes {
+		if node.Address == ip {
+			return node.Zone
+		}
+	}
+	return ""
+}
+
+func (b *Broker) getPeerSubnetAddrs() []net.IP {
+	ips := make([]net.IP, len(b.nodes))
+	i := 0
+	for _, node := range b.nodes {
+		ips[i] = net.ParseIP(node.Address)
+		i++
+	}
+
+	return ips
 }
 
 func (b *Broker) StartListeners() {
@@ -108,7 +124,7 @@ func (b *Broker) RegisterPeer(ctx context.Context, peer *pb.Peer) (*pb.RegisterP
 		return &pb.RegisterPeerResponse{Success: false}, err
 	}
 
-	b.nodeZones[peer.Address] = peer.Zone
+	b.nodes[peer.PublicKey] = pubsub.NodeSpec{Address: peer.Address, Zone: peer.Zone}
 
 	// broadcast local peers config to nats
 	peers, err := b.cable.GetPeers(nil)
@@ -133,7 +149,7 @@ func (b *Broker) UnregisterPeer(ctx context.Context, peer *pb.UnregisterPeerRequ
 		return &pb.UnregisterPeerResponse{Success: false}, err
 	}
 
-	delete(b.nodeZones, peer.PublicKey)
+	delete(b.nodes, peer.PublicKey)
 
 	// broadcast updated peers list, peers will sync with new config thus removing this peer
 	ctx = context.TODO()
@@ -167,7 +183,10 @@ func (b *Broker) newBroadcast(peers []wgtypes.PeerConfig) {
 
 	peersList := make([]pubsub.PubPeer, len(peers))
 	for i, peer := range peers {
-		peersList[i] = pubsub.PubPeer{Peer: peer, Zone: b.nodeZones[peer.PublicKey.String()]}
+		peersList[i] = pubsub.PubPeer{
+			Peer:     peer,
+			Metadata: pubsub.NodeSpec{Address: b.nodes[peer.PublicKey.String()].Address, Zone: b.nodes[peer.PublicKey.String()].Zone},
+		}
 	}
 
 	b.BroadcastPeers(peersList)

@@ -3,6 +3,7 @@ package peer
 import (
 	"context"
 	"fmt"
+	"net"
 	"p2p-overlay/pkg/cable"
 	link_monitor "p2p-overlay/pkg/link-monitor"
 	"p2p-overlay/pkg/pubsub"
@@ -26,17 +27,18 @@ type Peer struct {
 	grpcClient pb.PeersClient
 	pubsub.Subscriber
 	link_monitor.Monitor
-	natsHost  string
-	grpcAddr  string
-	zone      string
-	nodeZones map[string]string
+	natsHost string
+	grpcAddr string
+	zone     string
+	nodes    map[string]pubsub.NodeSpec
 }
 
 func NewPeer(peerCableType, brokerHost string, hostZone string) *Peer {
-	p := &Peer{zone: hostZone}
+	p := &Peer{zone: hostZone, natsHost: brokerHost}
 
-	p.natsHost = brokerHost
 	p.grpcAddr = fmt.Sprintf("%s:%d", brokerHost, grpcPort)
+
+	p.nodes = make(map[string]pubsub.NodeSpec)
 
 	p.cable = cable.NewCable(peerCableType)
 
@@ -65,35 +67,6 @@ func (p *Peer) connectToBroker() {
 	log.Print("connected to broker over grpc")
 }
 
-func (p *Peer) updateLocalPeers(peers []pubsub.PubPeer) {
-	log.Printf("new peers broadcasted.")
-	ctx := context.TODO()
-
-	key := p.cable.GetPubKey()
-	peerConfs := make([]wgtypes.PeerConfig, len(peers))
-
-	member := false
-	for i, peer := range peers {
-		p.nodeZones[peer.Peer.AllowedIPs[0].IP.String()] = peer.Zone
-		peerConfs[i] = peer.Peer
-		if peer.Peer.PublicKey.String() == key {
-			member = true
-			break
-		}
-	}
-
-	if !member {
-		peerConfs = make([]wgtypes.PeerConfig, 0)
-		log.Println("delete self signal received.")
-	}
-
-	p.cable.SyncPeers(ctx, peerConfs)
-}
-
-func (p *Peer) getNodeZone(ip string) string {
-	return p.nodeZones[ip]
-}
-
 func (p *Peer) RegisterSelf() {
 	// Perform config handshake with broker
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*60)
@@ -117,15 +90,62 @@ func (p *Peer) RegisterSelf() {
 
 	log.Printf("overlay address provisioned: %s", brokerRes.Address)
 
+	p.nodes[p.cable.GetPubKey()] = pubsub.NodeSpec{Address: brokerRes.Address, Zone: p.zone}
+
 	p.cable.SetAddress(brokerRes.Address)
 	p.cable.AddrAdd()
 
 	// monitor tunnel performance
 	p.InitializeMonitoring(p.natsHost, brokerRes.Address, "peer")
-	p.StartMonitor(monitoringInterval, p.cable.GetPeerTopology, p.getNodeZone)
+	p.StartMonitor(monitoringInterval, p.getPeerSubnetAddrs, p.getNodeZone)
 }
 
 func (p *Peer) unRegisterSelf() {
 	// send grpc request to broker
 	// remove local interfaces
+}
+
+func (p *Peer) updateLocalPeers(peers []pubsub.PubPeer) {
+	log.Printf("new peers broadcasted.")
+	ctx := context.TODO()
+
+	key := p.cable.GetPubKey()
+	peerConfs := make([]wgtypes.PeerConfig, len(peers))
+
+	member := false
+	for i, peer := range peers {
+		p.nodes[peer.Peer.PublicKey.String()] = pubsub.NodeSpec{Address: peer.Metadata.Address, Zone: peer.Metadata.Zone}
+		peerConfs[i] = peer.Peer
+		if peer.Peer.PublicKey.String() == key {
+			member = true
+			break
+		}
+	}
+
+	if !member {
+		peerConfs = make([]wgtypes.PeerConfig, 0)
+		log.Println("delete self signal received.")
+	}
+
+	p.cable.SyncPeers(ctx, peerConfs)
+}
+
+func (p *Peer) getNodeZone(ip string) string {
+	for _, node := range p.nodes {
+		if node.Address == ip {
+			return node.Zone
+		}
+	}
+	return ""
+}
+
+func (p *Peer) getPeerSubnetAddrs() []net.IP {
+	ips := make([]net.IP, len(p.nodes))
+	i := 0
+	for _, node := range p.nodes {
+		ips[i] = net.ParseIP(node.Address)
+		i++
+	}
+
+	return ips
 }

@@ -20,7 +20,7 @@ const (
 	ARANGO_GRAPH         = "link_performance"
 )
 
-type localPeerTopologyFunc func() ([]net.IP, error)
+type localPeerTopologyFunc func() []net.IP
 type peerZoneFunc func(string) string
 
 type Monitor struct {
@@ -56,11 +56,7 @@ func (m *Monitor) StartMonitor(granularity int, topoFunc localPeerTopologyFunc, 
 }
 
 func (m *Monitor) peersProbe(topoFunc localPeerTopologyFunc, zoneFunc peerZoneFunc) {
-	peers, err := topoFunc()
-	if err != nil {
-		log.Errorf("error getting local peers: %v", err)
-		return
-	}
+	peers := topoFunc()
 
 	for _, peer := range peers {
 		go m.probe(peer, zoneFunc)
