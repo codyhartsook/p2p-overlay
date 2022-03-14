@@ -25,16 +25,15 @@ type ArangoClient struct {
 	vertices driver.Collection
 }
 
+// Define wg network overlay graph structure
 type VertexNode struct {
-	Key string `json:"_key"` // mandatory field (handle) - short name
+	Key string `json:"_key"`
 }
 
 type EdgeLink struct {
-	Key  string `json:"_key"`  // mandatory field (handle)
-	From string `json:"_from"` // mandatory field
-	To   string `json:"_to"`   // mandatory field
-
-	// other fields … e.g.
+	Key  string `json:"_key"`
+	From string `json:"_from"`
+	To   string `json:"_to"`
 
 	Rtt    int64   `json:"rtt"`
 	Jitter int64   `json:"jitter"`
@@ -101,32 +100,38 @@ func ensureDatabase(c driver.Client, cfg ArangoConfig) (driver.Database, error) 
 }
 
 func (a *ArangoClient) CreateGraph(name string) {
-	g_exists, err := a.db.GraphExists(nil, name)
-	if g_exists {
-		return
+	g_exists, _ := a.db.GraphExists(nil, name)
+	if !g_exists {
+		g, err := a.db.CreateGraph(nil, name, nil)
+		if err != nil {
+			log.Fatalf("Failed to create graph: %v", err)
+		}
+		a.graph = g
+	} else {
+		a.graph, _ = a.db.Graph(nil, name)
 	}
 
-	g, err := a.db.CreateGraph(nil, name, nil)
-	if err != nil {
-		log.Fatalf("Failed to create graph: %v", err)
+	v_exists, _ := a.graph.VertexCollectionExists(nil, "nodes")
+	if !v_exists {
+		vertices, err := a.graph.CreateVertexCollection(nil, "nodes")
+		if err != nil {
+			log.Fatalf("Failed to create vertex collection: %v", err)
+		}
+		a.vertices = vertices
 	}
 
-	a.graph = g
-	vertices, err := a.graph.CreateVertexCollection(nil, "nodes")
-	if err != nil {
-		log.Fatalf("Failed to create vertex collection: %v", err)
+	e_exists, _ := a.graph.EdgeCollectionExists(nil, "edges")
+	if !e_exists {
+		constraints := driver.VertexConstraints{
+			From: []string{"nodes"},
+			To:   []string{"nodes"},
+		}
+		edges, err := a.graph.CreateEdgeCollection(nil, "edges", constraints)
+		if err != nil {
+			log.Fatalf("Failed to create edge collection: %v", err)
+		}
+		a.edges = edges
 	}
-
-	constraints := driver.VertexConstraints{
-		From: []string{"nodes"},
-		To:   []string{"nodes"},
-	}
-	a.vertices = vertices
-	edges, err := a.graph.CreateEdgeCollection(nil, "edges", constraints)
-	if err != nil {
-		log.Fatalf("Failed to create edge collection: %v", err)
-	}
-	a.edges = edges
 }
 
 func (a *ArangoClient) LoadGraph(gName string) {
@@ -154,7 +159,7 @@ func (a *ArangoClient) AddEdge(src, dst string, stats *ping.Statistics) {
 	if exists, _ := a.vertices.DocumentExists(context.TODO(), src); !exists {
 		_, err := a.vertices.CreateDocument(context.TODO(), srcV)
 		if err != nil {
-			log.Fatalf("Failed to create document: %v", err)
+			log.Fatalf("Failed to create document: %s : %v", src, err)
 		}
 	}
 
@@ -162,7 +167,7 @@ func (a *ArangoClient) AddEdge(src, dst string, stats *ping.Statistics) {
 	if exists, _ := a.vertices.DocumentExists(context.TODO(), dst); !exists {
 		_, err := a.vertices.CreateDocument(context.TODO(), dstV)
 		if err != nil {
-			log.Fatalf("Failed to create document: %v", err)
+			log.Fatalf("Failed to create document: %s : %v", dst, err)
 		}
 	}
 
@@ -180,12 +185,12 @@ func (a *ArangoClient) AddEdge(src, dst string, stats *ping.Statistics) {
 	if exists, _ := a.edges.DocumentExists(context.TODO(), edge.Key); !exists {
 		_, err := a.edges.CreateDocument(context.TODO(), edge)
 		if err != nil {
-			log.Fatalf("Failed to create document: %v", err)
+			log.Fatalf("Failed to create document: %v : %v", edge, err)
 		}
 	} else {
 		_, err := a.edges.UpdateDocument(context.TODO(), edge.Key, edge)
 		if err != nil {
-			log.Fatalf("Failed to update document: %v", err)
+			log.Fatalf("Failed to update document: %v: %v", edge, err)
 		}
 	}
 }
