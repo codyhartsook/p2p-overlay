@@ -80,7 +80,7 @@ func (m *Monitor) probe(peer net.IP, zoneFunc peerZoneFunc) {
 
 	stats := pinger.Statistics()
 
-	src := fmt.Sprintf("%s-%s", m.root, zoneFunc(peer.String()))
-	dst := fmt.Sprintf("%s-%s", peer.String(), zoneFunc(peer.String()))
+	src := fmt.Sprintf("%s--%s", m.root, zoneFunc(m.root))
+	dst := fmt.Sprintf("%s--%s", peer.String(), zoneFunc(peer.String()))
 	m.client.AddEdge(src, dst, stats)
 }
