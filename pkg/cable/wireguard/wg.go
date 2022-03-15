@@ -15,7 +15,7 @@ import (
 
 	pb "p2p-overlay/pkg/grpc"
 
-	"p2p-overlay/pkg/addresses"
+	"p2p-overlay/pkg/subnet"
 
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
@@ -195,25 +195,10 @@ func (w *WGCtrl) GetPeers(ctx context.Context) ([]wgtypes.PeerConfig, error) {
 	return peerConfigs, nil
 }
 
-func (w *WGCtrl) GetPeerTopology() ([]net.IP, error) {
-	peers, err := w.GetPeers(context.Background())
-	if err != nil {
-		return nil, err
-	}
-
-	topology := make([]net.IP, len(peers))
-	for i, peer := range peers {
-		firstIP := peer.AllowedIPs[0].IP
-		topology[i] = firstIP
-	}
-
-	return topology, nil
-}
-
 func (w *WGCtrl) GetLocalConfig() wgtypes.PeerConfig {
 	ip := GetLocalIP()
 
-	allowedIPs := []net.IPNet{addresses.AddressToNet(w.address, 32)}
+	allowedIPs := []net.IPNet{subnet.AddressToNet(w.address, 32)}
 
 	dev, _ := w.client.Device(DefaultDeviceName)
 	conf := wgtypes.PeerConfig{
@@ -324,7 +309,7 @@ func (w *WGCtrl) ProtobufToPeerConfig(peer *pb.Peer) (wgtypes.PeerConfig, error)
 
 	allowedIPs, err := parseSubnets(peer.AllowedIps)
 	if err != nil {
-		allowedIPs = []net.IPNet{addresses.AddressToNet(peer.Address, 32)}
+		allowedIPs = []net.IPNet{subnet.AddressToNet(peer.Address, 32)}
 	}
 
 	ka := KeepAliveInterval
@@ -358,20 +343,6 @@ func parseSubnets(subnets []string) ([]net.IPNet, error) {
 	}
 
 	return nets, nil
-}
-
-func keyFromMap(keys map[string]string) (*wgtypes.Key, error) {
-	s, found := keys[PublicKey]
-	if !found {
-		return nil, fmt.Errorf("missing public key")
-	}
-
-	key, err := wgtypes.ParseKey(s)
-	if err != nil {
-		return nil, errors.Wrapf(err, "failed to parse public key %s", s)
-	}
-
-	return &key, nil
 }
 
 func genPsk(psk string) (wgtypes.Key, error) {

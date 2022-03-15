@@ -17,6 +17,16 @@ type Publisher struct {
 	conn *nats.EncodedConn
 }
 
+type NodeSpec struct {
+	Address string `json:"address"`
+	Zone    string `json:"zone"`
+}
+
+type PubPeer struct {
+	Peer     wgtypes.PeerConfig `json:"peer"`
+	Metadata NodeSpec           `json:"metadata"`
+}
+
 func (p *Publisher) RegisterPublisher(natsHost string) {
 	natsAddr := fmt.Sprintf("%s:%d", natsHost, natsPort)
 	nc, err := nats.Connect(natsAddr)
@@ -33,7 +43,7 @@ func (p *Publisher) RegisterPublisher(natsHost string) {
 	log.Info("connected to nats server.")
 }
 
-func (p *Publisher) BroadcastPeers(peers []wgtypes.PeerConfig) {
+func (p *Publisher) BroadcastPeers(peers []PubPeer) {
 	err := p.conn.Publish(PeerNodes, peers)
 	if err != nil {
 		log.Fatalf("error publishing to channel %s: %v", PeerNodes, err)
@@ -60,9 +70,9 @@ func (s *Subscriber) RegisterNatsSubscriber(natsHost string) {
 	s.subConn = c
 }
 
-func (s *Subscriber) SubscribeToChannels(handler func([]wgtypes.PeerConfig)) {
+func (s *Subscriber) SubscribeToChannels(handler func([]PubPeer)) {
 	// Nats Async Ephemeral Consumer
-	_, err := s.subConn.Subscribe(PeerNodes, func(m []wgtypes.PeerConfig) {
+	_, err := s.subConn.Subscribe(PeerNodes, func(m []PubPeer) {
 		handler(m)
 	})
 	if err != nil {
