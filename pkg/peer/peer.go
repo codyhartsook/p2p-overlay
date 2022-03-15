@@ -40,7 +40,7 @@ func NewPeer(peerCableType, brokerHost string, hostZone string) *Peer {
 
 	p.nodes = make(map[string]pubsub.NodeSpec)
 
-	p.cable = cable.NewCable(peerCableType)
+	p.cable = cable.NewCable(peerCableType) // wireguard tunnel agent
 
 	err := p.cable.Init()
 	if err != nil {
@@ -67,6 +67,8 @@ func (p *Peer) connectToBroker() {
 	log.Print("connected to broker over grpc")
 }
 
+// RegisterSelf sendds a grpc request in order to swap public keys,
+// allowed ips and wg metadata
 func (p *Peer) RegisterSelf() {
 	// Perform config handshake with broker
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*60)
@@ -88,10 +90,11 @@ func (p *Peer) RegisterSelf() {
 		log.Fatalf("broker rejected peer registration")
 	}
 
+	// broker response contains this peers subnet address
 	log.Printf("overlay address provisioned: %s", brokerRes.Address)
-
 	p.nodes[p.cable.GetPubKey()] = pubsub.NodeSpec{Address: brokerRes.Address, Zone: p.zone}
 
+	// add route with this subnet address
 	p.cable.SetAddress(brokerRes.Address)
 	p.cable.AddrAdd()
 
@@ -102,7 +105,7 @@ func (p *Peer) RegisterSelf() {
 
 func (p *Peer) unRegisterSelf() {
 	// send grpc request to broker
-	// remove local interfaces
+	// sync peers
 }
 
 func (p *Peer) updateLocalPeers(peers []pubsub.PubPeer) {
@@ -112,6 +115,7 @@ func (p *Peer) updateLocalPeers(peers []pubsub.PubPeer) {
 	key := p.cable.GetPubKey()
 	peerConfs := make([]wgtypes.PeerConfig, len(peers))
 
+	// update view of valid peers and check if this peer was removed
 	member := false
 	for i, peer := range peers {
 		p.nodes[peer.Peer.PublicKey.String()] = pubsub.NodeSpec{Address: peer.Metadata.Address, Zone: peer.Metadata.Zone}
@@ -126,6 +130,7 @@ func (p *Peer) updateLocalPeers(peers []pubsub.PubPeer) {
 		log.Println("delete self signal received.")
 	}
 
+	// sync local peers table
 	p.cable.SyncPeers(ctx, peerConfs)
 }
 
